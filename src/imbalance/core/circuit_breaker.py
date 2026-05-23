@@ -30,6 +30,8 @@ class CircuitBreaker:
 	) -> None:
 		if min(failure_threshold, success_threshold) < 1:
 			raise ValueError('Thresholds must be positive')
+		if recovery_timeout < 0:
+			raise ValueError('recovery_timeout must be non-negative')
 		self.name = name
 		self.failure_threshold = failure_threshold
 		self.recovery_timeout = recovery_timeout

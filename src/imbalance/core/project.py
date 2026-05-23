@@ -5,7 +5,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from platformdirs import user_data_dir
+from platformdirs import user_config_dir, user_data_dir
 
 CONFIG_FILE = 'imbalance.toml'
 
@@ -86,7 +86,7 @@ def find_project_config(start: Path | None = None) -> Path | None:
 def load_project(start: Path | None = None) -> Project:
 	config_path = find_project_config(start)
 	if config_path is None:
-		global_config = Path.home() / '.config' / 'imbalance' / 'config.toml'
+		global_config = Path(user_config_dir('imbalance')) / CONFIG_FILE
 		if not global_config.exists():
 			raise FileNotFoundError(
 				f'Could not find {CONFIG_FILE} above {start or Path.cwd()} '

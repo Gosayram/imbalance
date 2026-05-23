@@ -19,7 +19,7 @@ class ToolResultReceipts:
 		ref_path: str | None = None,
 		preview_chars: int = 500,
 	) -> str:
-		receipt_id = f'tr_{uuid.uuid4().hex[:12]}'
+		receipt_id = f'tr_{uuid.uuid4().hex}'
 		content_bytes = content.encode('utf-8')
 		await self.db.execute(
 			"""

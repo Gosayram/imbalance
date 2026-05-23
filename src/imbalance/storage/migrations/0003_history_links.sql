@@ -10,11 +10,12 @@ CREATE TABLE IF NOT EXISTS wiki_history (
 );
 
 CREATE TABLE IF NOT EXISTS kb_links (
+	kb_name TEXT NOT NULL,
 	source_slug TEXT NOT NULL,
 	target_slug TEXT NOT NULL,
 	link_type TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-	PRIMARY KEY (source_slug, target_slug, link_type)
+	PRIMARY KEY (kb_name, source_slug, target_slug, link_type)
 );
 
 CREATE TABLE IF NOT EXISTS wiki_tags (
@@ -28,3 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_wiki_history_slug
 
 CREATE INDEX IF NOT EXISTS idx_wiki_tags_tag
 	ON wiki_tags(tag);
+
+-- Migrate existing kb_links to include kb_name
+INSERT OR IGNORE INTO kb_links(kb_name, source_slug, target_slug, link_type)
+	SELECT 'default', source_slug, target_slug, link_type FROM kb_links WHERE kb_name IS NULL;

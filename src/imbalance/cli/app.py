@@ -135,7 +135,14 @@ def queue_recover() -> None:
 
 @queue_app.command('status')
 def queue_status() -> None:
-	asyncio.run(_queue_status())
+ 	asyncio.run(_queue_status())
+
+
+@queue_app.command('retry')
+def queue_retry(
+ 	session_id: Annotated[str | None, typer.Argument()] = None,
+ ) -> None:
+ 	asyncio.run(_queue_retry(session_id))
 
 
 @daemon_app.command('start')

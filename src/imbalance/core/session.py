@@ -111,7 +111,7 @@ class SessionManager:
 		await self.db.execute(
 			"""
 			UPDATE sessions
-			SET status=?, flushed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+			SET status=?, flushed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'), log_path=NULL
 			WHERE id=?
 			""",
 			(SessionStatus.FLUSHED.value, session_id),
@@ -149,8 +149,8 @@ class SessionManager:
 
 	async def get(self, session_id: str) -> SessionRecord | None:
 		cursor = await self.db.execute(
-			'SELECT id, kb_name, machine_id, status, log_path FROM sessions WHERE id=?',
-			(session_id,),
+			'SELECT id, kb_name, machine_id, status, log_path FROM sessions WHERE id=? AND kb_name=?',
+			(session_id, self.kb_name),
 		)
 		row = await cursor.fetchone()
 		if row is None:

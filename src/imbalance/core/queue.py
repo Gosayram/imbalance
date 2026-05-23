@@ -26,9 +26,13 @@ class FlushQueue:
 	async def enqueue(self, session_id: str, payload: str) -> None:
 		await self.db.execute(
 			"""
-			INSERT INTO flush_queue(session_id, payload, next_retry)
-			VALUES (?, ?, ?)
-			ON CONFLICT(session_id) DO UPDATE SET payload=excluded.payload
+			INSERT INTO flush_queue(session_id, payload, attempts, next_retry, error)
+			VALUES (?, ?, 0, ?, NULL)
+			ON CONFLICT(session_id) DO UPDATE SET
+				payload=excluded.payload,
+				attempts=0,
+				next_retry=excluded.next_retry,
+				error=NULL
 			""",
 			(session_id, payload, _iso_now()),
 		)
