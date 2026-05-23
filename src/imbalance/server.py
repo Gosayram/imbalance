@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import signal
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import aiosqlite
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
 	from uvicorn import Server
 
 logger = logging.getLogger(__name__)
+
+PID_FILE = Path.home() / '.config' / 'imbalance' / 'daemon.pid'
 
 
 class ImbalanceDaemon:
@@ -39,6 +42,9 @@ class ImbalanceDaemon:
 		if recovered or failed:
 			logger.info(f'Session recovery: {recovered} recovered, {failed} failed')
 
+		PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+		PID_FILE.write_text(str(asyncio.get_event_loop()._process_pid or 0))
+
 	async def shutdown(self) -> None:
 		logger.info('Shutting down gracefully...')
 		self._accepting = False
@@ -55,6 +61,9 @@ class ImbalanceDaemon:
 		if self.db:
 			await checkpoint(self.db, mode='FULL')
 			await self.db.close()
+
+		with contextlib.suppress(Exception):
+			PID_FILE.unlink(missing_ok=True)
 
 	def register_signal_handlers(self) -> None:
 		loop = asyncio.get_event_loop()

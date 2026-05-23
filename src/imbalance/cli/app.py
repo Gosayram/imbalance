@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import signal
 from pathlib import Path
 from typing import Annotated
 
@@ -171,7 +172,34 @@ def daemon_start(
 
 @daemon_app.command('stop')
 def daemon_stop() -> None:
-	typer.echo('Send SIGTERM to running daemon process')
+	try:
+		from imbalance.server import PID_FILE
+	except ImportError:
+		typer.echo('Daemon PID file path unavailable')
+		raise typer.Exit(code=1) from None
+
+	if not PID_FILE.exists():
+		typer.echo('No daemon PID file found')
+		raise typer.Exit(code=1)
+
+	try:
+		pid = int(PID_FILE.read_text().strip())
+	except ValueError, OSError:
+		typer.echo('Invalid PID file')
+		raise typer.Exit(code=1) from None
+
+	try:
+		import os
+
+		os.kill(pid, signal.SIGTERM)
+		typer.echo(f'Sent SIGTERM to daemon (PID {pid})')
+	except ProcessLookupError:
+		typer.echo(f'Daemon process {pid} not found')
+		PID_FILE.unlink(missing_ok=True)
+		raise typer.Exit(code=1) from None
+	except PermissionError:
+		typer.echo(f'Permission denied to kill process {pid}')
+		raise typer.Exit(code=1) from None
 
 
 async def _daemon_start(port: int) -> None:
@@ -282,12 +310,14 @@ async def _session_flush(
 ) -> None:
 	project = load_project()
 	db = await _open_project_db(project)
-	manager = _session_manager(db, project)
-	await manager.flush(
-		session_id,
-		FlushPayload(summary=summary, decisions=decisions, next_steps=next_steps),
-	)
-	await db.close()
+	try:
+		manager = _session_manager(db, project)
+		await manager.flush(
+			session_id,
+			FlushPayload(summary=summary, decisions=decisions, next_steps=next_steps),
+		)
+	finally:
+		await db.close()
 	typer.echo(f'flushed {session_id}')
 
 
@@ -315,14 +345,16 @@ async def _queue_status() -> None:
 async def _queue_retry(session_id: str | None) -> None:
 	project = load_project()
 	db = await _open_project_db(project)
-	queue = FlushQueue(db)
-	if session_id:
-		await queue.reset_retry(session_id)
-		typer.echo(f'reset retry for session {session_id}')
-	else:
-		recovered = await queue.reset_all_retries()
-		typer.echo(f'reset {recovered} items')
-	await db.close()
+	try:
+		queue = FlushQueue(db)
+		if session_id:
+			await queue.reset_retry(session_id)
+			typer.echo(f'reset retry for session {session_id}')
+		else:
+			recovered = await queue.reset_all_retries()
+			typer.echo(f'reset {recovered} items')
+	finally:
+		await db.close()
 
 
 async def _open_project_db(project: Project):

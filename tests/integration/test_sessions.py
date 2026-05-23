@@ -65,7 +65,11 @@ async def test_recovery_enqueues_valid_pending_and_fails_corrupt_payload(tmp_pat
 	recovered, failed = await manager.recover_pending()
 
 	assert (recovered, failed) == (1, 1)
-	assert await FlushQueue(db).count() == 1
+	queue = FlushQueue(db)
+	assert await queue.count() == 1
+	items = await queue.items()
+	assert len(items) == 1
+	assert items[0].session_id == 'valid'
 	broken = await manager.get('broken')
 	assert broken is not None
 	assert broken.status == SessionStatus.FAILED

@@ -37,9 +37,8 @@ def create_app() -> FastAPI:
 	async def status() -> dict[str, object]:
 		project = load_project()
 		db = await open_db(project.db_path)
-		await run_migrations(db)
-
 		try:
+			await run_migrations(db)
 			cursor = await db.execute_fetchall(
 				'SELECT COUNT(*) as cnt FROM sessions WHERE kb_name=?',
 				(project.name,),
@@ -80,10 +79,10 @@ def create_app() -> FastAPI:
 
 		project = load_project()
 		db = await open_db(project.db_path)
-		await run_migrations(db)
-		store = SQLiteStore(db, project.name)
-
 		try:
+			await run_migrations(db)
+			store = SQLiteStore(db, project.name)
+
 			pack = await QueryEngine(store).get_context_pack(
 				query=query,
 				budget_tokens=budget_tokens,

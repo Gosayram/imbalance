@@ -82,10 +82,10 @@ class ModelRouter:
 			temperature=0.3,
 		)
 		if not response.choices:
-			raise RuntimeError('No choices returned from model')
+			raise OpenAIError('No choices returned from model')
 		content = response.choices[0].message.content
 		if content is None:
-			raise RuntimeError('Empty response from model')
+			raise OpenAIError('Empty response from model')
 		return content
 
 	async def apply_delta(self, delta_json: str, db_session_manager: Any) -> None:
