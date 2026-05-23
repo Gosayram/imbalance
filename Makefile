@@ -1,4 +1,4 @@
-.PHONY: help setup venv sync install-dev compile test test-unit test-integration lint format typecheck changelog-check doctor init-db coderabbit-review
+.PHONY: help setup venv sync install-dev compile test test-unit test-integration lint check check-all format typecheck changelog-check doctor init-db coderabbit-review
 
 UV ?= uv
 UV_PYTHON ?= 3.14
@@ -61,9 +61,15 @@ test-integration: venv ## Run SQLite integration tests
 lint: venv ## Run Ruff lint
 	$(PYTHON) -m ruff check src tests
 
+check: venv ## Run Ruff lint with auto-fix and format
+	$(PYTHON) -m ruff check --fix src tests
+	$(PYTHON) -m ruff format src tests
+
+check-all: check typecheck changelog-check ## Run all checks: check + typecheck + changelog
+	@echo "$(GREEN)All checks passed!$(RESET)"
+
 format: venv ## Format Python code with Ruff
 	$(PYTHON) -m ruff format src tests
-	$(PYTHON) -m ruff check --fix src tests
 
 typecheck: venv ## Run mypy
 	$(PYTHON) -m mypy src
