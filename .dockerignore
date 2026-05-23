@@ -1,0 +1,78 @@
+# Version control and repository metadata
+.git
+.gitignore
+.gitattributes
+.github
+
+# Local configuration, secrets, and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials.json
+secrets.*
+
+# Python virtual environments and local Python runtimes
+.venv
+venv
+env
+.python-version
+.uv-cache
+.uv-python
+__pypackages__
+
+# Bytecode, build products, and packaging output
+__pycache__
+**/__pycache__
+*.py[cod]
+*.so
+*.egg-info
+*.egg-info/
+.eggs
+build
+dist
+wheels
+
+# Tooling and test caches
+.cache
+.coverage
+.coverage.*
+.hypothesis
+.mypy_cache
+.nox
+.pytest_cache
+.ruff_cache
+.tox
+coverage.xml
+htmlcov
+test-results
+
+# Local runtime state and generated application data
+.data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+logs
+*.log
+
+# IDE and operating-system files
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Project planning scratch files are not needed for image builds
+.*-docs.md
+
+# Documentation and release artifacts not required at runtime
+CHANGELOG.md
+docs
+site
