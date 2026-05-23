@@ -18,9 +18,11 @@ app = typer.Typer(help='SQLite-first context memory for coding agents.')
 project_app = typer.Typer(help='Project commands.')
 session_app = typer.Typer(help='Session checkpoint and recovery commands.')
 queue_app = typer.Typer(help='Durable flush queue commands.')
+daemon_app = typer.Typer(help='Daemon commands.')
 app.add_typer(project_app, name='project')
 app.add_typer(session_app, name='session')
 app.add_typer(queue_app, name='queue')
+app.add_typer(daemon_app, name='daemon')
 
 
 @project_app.command('info')
@@ -134,6 +136,24 @@ def queue_recover() -> None:
 @queue_app.command('status')
 def queue_status() -> None:
 	asyncio.run(_queue_status())
+
+
+@daemon_app.command('start')
+def daemon_start(
+	port: Annotated[int, typer.Option('--port')] = 4731,
+) -> None:
+	asyncio.run(_daemon_start(port))
+
+
+@daemon_app.command('stop')
+def daemon_stop() -> None:
+	typer.echo('Send SIGTERM to running daemon process')
+
+
+async def _daemon_start(port: int) -> None:
+	from imbalance.server import run_daemon
+
+	await run_daemon(port)
 
 
 async def _init_db() -> None:
