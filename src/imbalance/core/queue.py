@@ -85,6 +85,21 @@ class FlushQueue:
 		row = await cursor.fetchone()
 		return int(row[0]) if row else 0
 
+	async def reset_retry(self, session_id: str) -> None:
+		await self.db.execute(
+			'UPDATE flush_queue SET attempts=0, next_retry=?, error=NULL WHERE session_id=?',
+			(_iso_now(), session_id),
+		)
+		await self.db.commit()
+
+	async def reset_all_retries(self) -> int:
+		await self.db.execute(
+			'UPDATE flush_queue SET attempts=0, next_retry=?, error=NULL',
+			(_iso_now(),),
+		)
+		await self.db.commit()
+		return await self.count()
+
 
 def _to_queued_flushes(rows: Iterable[aiosqlite.Row]) -> list[QueuedFlush]:
 	return [

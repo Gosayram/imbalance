@@ -1,4 +1,4 @@
-.PHONY: help sync install-dev compile test test-unit test-integration lint format typecheck changelog-check doctor init-db
+.PHONY: help sync install-dev compile test test-unit test-integration lint format typecheck changelog-check doctor init-db coderabbit-review
 
 UV ?= uv
 UV_CACHE_DIR ?= .uv-cache

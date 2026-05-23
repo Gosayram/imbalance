@@ -128,6 +128,23 @@ def session_list() -> None:
 	asyncio.run(_session_list())
 
 
+@session_app.command('flush')
+def session_flush(
+	session_id: Annotated[str, typer.Argument()],
+	summary: Annotated[str, typer.Option('--summary')],
+	decision: Annotated[list[str] | None, typer.Option('--decision')] = None,
+	next_step: Annotated[list[str] | None, typer.Option('--next-step')] = None,
+) -> None:
+	asyncio.run(
+		_session_flush(
+			session_id=session_id,
+			summary=summary,
+			decisions=decision or [],
+			next_steps=next_step or [],
+		)
+	)
+
+
 @queue_app.command('recover')
 def queue_recover() -> None:
 	asyncio.run(_queue_recover())
@@ -135,14 +152,14 @@ def queue_recover() -> None:
 
 @queue_app.command('status')
 def queue_status() -> None:
- 	asyncio.run(_queue_status())
+	asyncio.run(_queue_status())
 
 
 @queue_app.command('retry')
 def queue_retry(
- 	session_id: Annotated[str | None, typer.Argument()] = None,
- ) -> None:
- 	asyncio.run(_queue_retry(session_id))
+	session_id: Annotated[str | None, typer.Argument()] = None,
+) -> None:
+	asyncio.run(_queue_retry(session_id))
 
 
 @daemon_app.command('start')
@@ -257,6 +274,23 @@ async def _session_list() -> None:
 		typer.echo(f'{session.id}\t{session.status.value}\t{session.log_path or "-"}')
 
 
+async def _session_flush(
+	session_id: str,
+	summary: str,
+	decisions: list[str],
+	next_steps: list[str],
+) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	manager = _session_manager(db, project)
+	await manager.flush(
+		session_id,
+		FlushPayload(summary=summary, decisions=decisions, next_steps=next_steps),
+	)
+	await db.close()
+	typer.echo(f'flushed {session_id}')
+
+
 async def _queue_recover() -> None:
 	project = load_project()
 	db = await _open_project_db(project)
@@ -276,6 +310,19 @@ async def _queue_status() -> None:
 	typer.echo(f'queued: {count}')
 	for item in items:
 		typer.echo(f'{item.session_id}\tattempts={item.attempts}\tnext_retry={item.next_retry}')
+
+
+async def _queue_retry(session_id: str | None) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	queue = FlushQueue(db)
+	if session_id:
+		await queue.reset_retry(session_id)
+		typer.echo(f'reset retry for session {session_id}')
+	else:
+		recovered = await queue.reset_all_retries()
+		typer.echo(f'reset {recovered} items')
+	await db.close()
 
 
 async def _open_project_db(project: Project):

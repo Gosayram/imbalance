@@ -102,6 +102,10 @@ class SessionManager:
 		FlushPayload.from_json(payload)
 		await FlushQueue(self.db).enqueue(session_id, payload)
 
+	async def flush(self, session_id: str, payload: FlushPayload) -> None:
+		await self.prepare_flush(session_id, payload)
+		await self.enqueue_pending(session_id)
+
 	async def mark_flushed(self, session_id: str) -> None:
 		session = await self.get(session_id)
 		if session is None:
