@@ -4,6 +4,9 @@ extend = "../ruff.toml"
 # ...but use a different line length.
 line-length = 100
 include = ["pyproject.toml", "src/**/*.py", "scripts/**/*.py"]
+extension = {mdx="markdown", qmd="markdown"}
+extend-exclude = ["*.md"]
+force-exclude = true
 
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -42,11 +45,27 @@ indent-width = 4
 target-version = "py310"
 
 [lint]
-# Add "Q" to the list of enabled codes.
-select = ["E4", "E7", "E9", "F", "Q"]
+# Formatter-compatible baseline inspired by Ruff rules docs.
+select = [
+    "E4", "E7", "E9", # pycodestyle error subsets
+    "F",              # pyflakes
+    "B",              # flake8-bugbear
+    "UP",             # pyupgrade
+    "I",              # isort
+    "SIM",            # flake8-simplify
+    "C4",             # flake8-comprehensions
+    "RUF",            # Ruff-specific diagnostics
+]
 
 # 2. Avoid enforcing line-length violations (`E501`)
-ignore = ["E501"]
+ignore = [
+    "E501",
+    # Formatter conflicts (per Ruff formatter docs):
+    "Q000", "Q001", "Q002", "Q003", "Q004",
+    "COM812", "COM819",
+    "D203", "D206", "D300",
+    "W191", "E111", "E114", "E117",
+]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
@@ -68,8 +87,8 @@ docstring-quotes = "double"
 # 5. Use single quotes in `ruff format`.
 quote-style = "single"
 
-# Like Black, indent with spaces, rather than tabs.
-indent-style = "space"
+# Like Black, indent with tabs.
+indent-style = "tab"
 
 # Like Black, respect magic trailing commas.
 skip-magic-trailing-comma = false
@@ -80,14 +99,13 @@ line-ending = "auto"
 # Enable auto-formatting of code examples in docstrings. Markdown,
 # reStructuredText code/literal blocks and doctests are all supported.
 #
-# This is currently disabled by default, but it is planned for this
-# to be opt-out in the future.
-docstring-code-format = false
+# Enabled explicitly.
+docstring-code-format = true
 
 # Set the line length limit used when formatting code snippets in
 # docstrings.
 #
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
-docstring-code-line-length = "dynamic"
+docstring-code-line-length = 20
 exclude = ["*.pyi"]
