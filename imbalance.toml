@@ -1,0 +1,20 @@
+[project]
+name = "imbalance"
+version = "1"
+
+[kb]
+store = "imbalance"
+
+[retrieval]
+budget_tokens = 2000
+
+[memory]
+mode = "read_write"
+live_update = true
+max_summary_tokens = 500
+max_raw_memories_for_consolidation = 128
+
+[security]
+redact_secrets = true
+redact_pii = true
+log_prompt_bodies = false
