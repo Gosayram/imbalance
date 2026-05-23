@@ -50,6 +50,7 @@ wheels
 coverage.xml
 htmlcov
 test-results
+test_results/
 
 # Local runtime state and generated application data
 .data

@@ -20,3 +20,4 @@ build/
 dist/
 htmlcov/
 node_modules/
+test_results/
