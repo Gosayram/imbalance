@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ARG TARGETARCH
 ARG GIT_CLIFF_VERSION=2.13.1

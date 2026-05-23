@@ -1,7 +1,7 @@
 # imbalance
 
 [![Version](https://img.shields.io/badge/version-0.1.0-0f766e.svg)](https://github.com/Gosayram/imbalance)
-[![Python](https://img.shields.io/badge/python-3.12-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.14-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0--only-2f855a.svg)](LICENSE)
 
 > SQLite-first local knowledge base and lightweight context layer for coding agents.
@@ -39,7 +39,7 @@ local-first workflow:
 | Reliability           | Atomic pending checkpoint files, startup recovery primitive, retry backoff, circuit breaker |
 | Context engineering   | `ContextPack`, memory-summary schema, rollout/raw memory schema, tool-result receipts       |
 | CLI                   | `project`, `init-db`, `doctor`, `save-fact`, `search`, `session`, and `queue` commands      |
-| Development           | `uv` lockfile, Python 3.12 `.venv`, Ruff, mypy, pytest, dev container, git-cliff            |
+| Development           | `uv` lockfile, Python 3.14 `.venv`, Ruff, mypy, pytest, dev container, git-cliff            |
 
 ## Architecture
 
@@ -68,7 +68,7 @@ current_task > current_filesystem > session_notes > memory_summary > wiki_sectio
 
 ### Requirements
 
-- Python `3.12`
+- Python `3.14`
 - [`uv`](https://docs.astral.sh/uv/)
 - `make` for convenience commands
 
@@ -179,7 +179,7 @@ The repository includes a reproducible [`.devcontainer`](.devcontainer) environm
 
 | Tool        | Version / Policy                  |
 | ----------- | --------------------------------- |
-| Python      | `3.12`                            |
+| Python      | `3.14`                            |
 | `uv`        | Installed from Astral's installer |
 | SQLite CLI  | `3.46+`                           |
 | `git-cliff` | `2.13.1` binary                   |
@@ -226,7 +226,7 @@ The initial migrations create a compact schema:
 
 ## Roadmap
 
-- [x] Package scaffold, Python 3.12/`uv` development workflow, dev container
+- [x] Package scaffold, Python 3.14/`uv` development workflow, dev container
 - [x] SQLite WAL storage, migrations, FTS5 retrieval, history/tags/link schema
 - [x] Context-pack representation and basic CLI workflow
 - [x] Session lifecycle, atomic pending checkpoints, durable queue, retry backoff

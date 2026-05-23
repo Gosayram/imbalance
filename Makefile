@@ -2,7 +2,8 @@
 
 UV ?= uv
 UV_CACHE_DIR ?= .uv-cache
-UV_RUN = UV_CACHE_DIR=$(UV_CACHE_DIR) $(UV)
+UV_PYTHON_INSTALL_DIR ?= .uv-python
+UV_RUN = UV_CACHE_DIR=$(UV_CACHE_DIR) UV_PYTHON_INSTALL_DIR=$(UV_PYTHON_INSTALL_DIR) $(UV)
 DEV_DATA_DIR ?= .data/imbalance
 
 help:
