@@ -29,7 +29,3 @@ CREATE INDEX IF NOT EXISTS idx_wiki_history_slug
 
 CREATE INDEX IF NOT EXISTS idx_wiki_tags_tag
 	ON wiki_tags(tag);
-
--- Migrate existing kb_links to include kb_name
-INSERT OR IGNORE INTO kb_links(kb_name, source_slug, target_slug, link_type)
-	SELECT 'default', source_slug, target_slug, link_type FROM kb_links WHERE kb_name IS NULL;

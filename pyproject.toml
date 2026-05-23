@@ -30,7 +30,7 @@ openai = ["sqlite-vec>=0.1.9,<0.2"]
 compress = ["llmlingua>=0.2.2,<0.3"]
 ui = ["jinja2>=3.1.6,<4", "mistune>=3.2.1,<4", "python-multipart>=0.0.29,<0.1"]
 git = ["gitpython>=3.1.50,<4"]
-all = ["imbalance[ollama,compress,ui,git]"]
+all = ["imbalance[ollama,openai,compress,ui,git]"]
 
 [build-system]
 requires = ["hatchling>=1.29,<2"]

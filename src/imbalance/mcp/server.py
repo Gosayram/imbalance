@@ -3,13 +3,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import aiosqlite
 import mcp.server.stdio
 import mcp.types as types
 from mcp.server import Server
 from mcp.server.models import InitializationOptions
 from mcp.server.notification import NotificationOptions
 
-from imbalance.core.project import load_project
+from imbalance.core.project import Project, load_project
 from imbalance.core.query import QueryEngine
 from imbalance.core.write import WriteEngine
 from imbalance.storage.db import open_db, run_migrations
@@ -92,7 +93,7 @@ async def handle_call_tool(
 		if name == 'save_fact':
 			return await _save_fact(store, arguments)
 		if name == 'flush_session':
-			return await _flush_session(project, arguments)
+			return await _flush_session(db, project, arguments)
 		if name == 'get_status':
 			return await _get_status(db, project.name)
 		raise ValueError(f'Unknown tool: {name}')
@@ -126,11 +127,11 @@ async def _save_fact(store: SQLiteStore, args: dict[str, Any]) -> list[types.Tex
 	]
 
 
-async def _flush_session(project: Any, args: dict[str, Any]) -> list[types.TextContent]:
+async def _flush_session(
+	db: aiosqlite.Connection, project: Project, args: dict[str, Any]
+) -> list[types.TextContent]:
 	from imbalance.core.session import FlushPayload, SessionManager
 
-	db = await open_db(project.db_path)
-	await run_migrations(db)
 	manager = SessionManager(db=db, kb_name=project.name, pending_dir=project.kb_dir / 'pending')
 	payload = FlushPayload(
 		summary=args.get('summary', ''),
@@ -139,7 +140,6 @@ async def _flush_session(project: Any, args: dict[str, Any]) -> list[types.TextC
 	)
 	path = await manager.prepare_flush(args['session_id'], payload)
 	await manager.enqueue_pending(args['session_id'])
-	await db.close()
 	return [types.TextContent(type='text', text=f'Checkpointed {args["session_id"]}: {path}')]
 
 

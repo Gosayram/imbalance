@@ -1,48 +1,85 @@
-.PHONY: help sync install-dev compile test test-unit test-integration lint format typecheck changelog-check doctor init-db coderabbit-review
+.PHONY: help setup venv sync install-dev compile test test-unit test-integration lint format typecheck changelog-check doctor init-db coderabbit-review
 
 UV ?= uv
+UV_PYTHON ?= 3.14
 UV_CACHE_DIR ?= .uv-cache
 UV_PYTHON_INSTALL_DIR ?= .uv-python
-UV_RUN = UV_CACHE_DIR=$(UV_CACHE_DIR) UV_PYTHON_INSTALL_DIR=$(UV_PYTHON_INSTALL_DIR) $(UV)
 DEV_DATA_DIR ?= .data/imbalance
 
-help:
-	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+# Colors for help output
+RED := \033[0;31m
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+BLUE := \033[0;34m
+CYAN := \033[0;36m
+RESET := \033[0m
 
-sync: ## Create/update local .venv with uv
-	$(UV_RUN) sync --extra dev
+# Python from .venv if exists, otherwise use uv run
+ifneq ($(wildcard .venv/bin/python),)
+  PYTHON := .venv/bin/python
+else
+  PYTHON := $(UV) run
+endif
+
+help: ## Show this help message
+	@printf "$(CYAN)Usage:$(RESET)\n"
+	@printf "  $(GREEN)make$(RESET) [target]\n\n"
+	@printf "$(CYAN)Targets:$(RESET)\n"
+	@awk 'BEGIN {FS = ":.*## "; max=0} \
+		/^[a-zA-Z0-9_-]+:.*## / { \
+			if (length($$1) > max) max = length($$1) \
+		} \
+		END { \
+			max = max + 2; \
+		} \
+		/^[a-zA-Z0-9_-]+:.*## / { \
+			printf "  $(YELLOW)%-$(max)s$(RESET) %s\n", $$1, $$2 \
+		}' $(MAKEFILE_LIST)
+
+venv: ## Create .venv virtual environment
+	@test -d .venv || $(UV) venv --python $(UV_PYTHON) .venv
+	@printf "$(GREEN).venv created$(RESET)\n"
+
+setup: venv sync ## Setup complete development environment
+
+sync: venv ## Create/update local .venv with uv
+	$(UV) sync --extra dev
 
 install-dev: sync ## Alias for sync
 
-compile: ## Compile source and tests without importing external dependencies
-	$(UV_RUN) run python -m compileall src tests
+compile: venv ## Compile source and tests without importing external dependencies
+	$(PYTHON) -m compileall src tests
 
 test: test-unit test-integration ## Run unit and integration tests
 
-test-unit: ## Run unit tests
-	$(UV_RUN) run pytest tests/unit
+test-unit: venv ## Run unit tests
+	$(PYTHON) -m pytest tests/unit
 
-test-integration: ## Run SQLite integration tests
-	$(UV_RUN) run pytest tests/integration
+test-integration: venv ## Run SQLite integration tests
+	$(PYTHON) -m pytest tests/integration
 
-lint: ## Run Ruff lint
-	$(UV_RUN) run ruff check src tests
+lint: venv ## Run Ruff lint
+	$(PYTHON) -m ruff check src tests
 
-format: ## Format Python code with Ruff
-	$(UV_RUN) run ruff format src tests
-	$(UV_RUN) run ruff check --fix src tests
+format: venv ## Format Python code with Ruff
+	$(PYTHON) -m ruff format src tests
+	$(PYTHON) -m ruff check --fix src tests
 
-typecheck: ## Run mypy
-	$(UV_RUN) run mypy src
+typecheck: venv ## Run mypy
+	$(PYTHON) -m mypy src
 
 changelog-check: ## Validate git-cliff changelog generation
 	git-cliff --unreleased --tag unreleased --config cliff.toml
 
-doctor: ## Run imbalance doctor for current project
-	IMBALANCE_DATA_DIR=$(DEV_DATA_DIR) $(UV_RUN) run python -m imbalance.cli.app doctor
+doctor: venv ## Run imbalance doctor for current project
+	IMBALANCE_DATA_DIR=$(DEV_DATA_DIR) $(PYTHON) -m imbalance.cli.app doctor
 
-init-db: ## Initialize the current project's SQLite database
-	IMBALANCE_DATA_DIR=$(DEV_DATA_DIR) $(UV_RUN) run python -m imbalance.cli.app init-db
+init-db: venv ## Initialize the current project's SQLite database
+	IMBALANCE_DATA_DIR=$(DEV_DATA_DIR) $(PYTHON) -m imbalance.cli.app init-db
 
-coderabbit-review: ## Run CodeRabbit review and save report to .coderabbit-docs.md
-	@echo "Running CodeRabbit review..." && time $(UV_RUN) run sh -c 'coderabbit review > .coderabbit-docs.md 2>&1 || true' || echo "coderabbit not installed or failed"
+coderabbit-review: venv ## Run CodeRabbit review and save report to .coderabbit-docs.md
+	@if command -v coderabbit >/dev/null 2>&1; then \
+		echo "$(YELLOW)Running CodeRabbit review...$(RESET)" && time coderabbit review > .coderabbit-docs.md 2>&1 || echo "$(RED)coderabbit failed$(RESET)"; \
+	else \
+		echo "$(YELLOW)Running CodeRabbit via uv...$(RESET)" && time $(PYTHON) -m coderabbit review > .coderabbit-docs.md 2>&1 || echo "$(RED)coderabbit not installed or failed$(RESET)"; \
+	fi

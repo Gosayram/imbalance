@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS rollout_summaries (
 CREATE TABLE IF NOT EXISTS raw_memories (
 	id INTEGER PRIMARY KEY,
 	kb_name TEXT NOT NULL,
-	session_id TEXT NOT NULL,
+	session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
 	memory_type TEXT NOT NULL,
 	content TEXT NOT NULL,
 	confidence REAL NOT NULL DEFAULT 0.5,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS raw_memories (
 
 CREATE TABLE IF NOT EXISTS tool_result_receipts (
 	id TEXT PRIMARY KEY,
-	session_id TEXT NOT NULL,
+	session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
 	tool_name TEXT NOT NULL,
 	content_hash TEXT NOT NULL,
 	preview TEXT NOT NULL,

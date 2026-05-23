@@ -81,6 +81,8 @@ class ModelRouter:
 			max_tokens=max_tokens,
 			temperature=0.3,
 		)
+		if not response.choices:
+			raise RuntimeError('No choices returned from model')
 		content = response.choices[0].message.content
 		if content is None:
 			raise RuntimeError('Empty response from model')
@@ -94,5 +96,29 @@ class ModelRouter:
 
 		summary = delta.get('summary', '')
 		decisions = delta.get('decisions', [])
+
+		if not isinstance(summary, str):
+			raise ValueError('Summary must be a string')
+		if not isinstance(decisions, list):
+			raise ValueError('Decisions must be a list')
+		for d in decisions:
+			if not isinstance(d, dict):
+				raise ValueError('Each decision must be a dict')
+
+		db = db_session_manager
+		kb_name = delta.get('kb_name', 'default')
+
+		await db.execute(
+			"""
+			INSERT INTO memory_summary(kb_name, content, token_count)
+			VALUES (?, ?, ?)
+			ON CONFLICT(kb_name) DO UPDATE SET
+				content=excluded.content,
+				token_count=excluded.token_count,
+				updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+			""",
+			(kb_name, summary, len(summary.split())),
+		)
+		await db.commit()
 
 		logger.info(f'Delta applied: {len(summary)} chars summary, {len(decisions)} decisions')

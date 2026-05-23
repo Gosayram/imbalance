@@ -55,7 +55,8 @@ class CircuitBreaker:
 	def _before_call(self) -> None:
 		if self.state != CircuitState.OPEN:
 			return
-		assert self.opened_at is not None
+		if self.opened_at is None:
+			raise RuntimeError(f'{self.name} circuit state is inconsistent')
 		if self._clock() - self.opened_at < self.recovery_timeout:
 			raise CircuitOpenError(f'{self.name} circuit is open')
 		self.state = CircuitState.HALF_OPEN

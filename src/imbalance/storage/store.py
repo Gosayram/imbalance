@@ -134,18 +134,22 @@ class SQLiteStore:
 		return _truncate_words(content, max_tokens)
 
 	async def upsert_memory_summary(self, content: str, token_count: int) -> None:
-		await self.db.execute(
-			"""
-			INSERT INTO memory_summary(kb_name, content, token_count)
-			VALUES (?, ?, ?)
-			ON CONFLICT(kb_name) DO UPDATE SET
-				content=excluded.content,
-				token_count=excluded.token_count,
-				updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
-			""",
-			(self.kb_name, content, token_count),
-		)
-		await self.db.commit()
+		try:
+			await self.db.execute(
+				"""
+				INSERT INTO memory_summary(kb_name, content, token_count)
+				VALUES (?, ?, ?)
+				ON CONFLICT(kb_name) DO UPDATE SET
+					content=excluded.content,
+					token_count=excluded.token_count,
+					updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+				""",
+				(self.kb_name, content, token_count),
+			)
+			await self.db.commit()
+		except Exception:
+			await self.db.rollback()
+			raise
 
 	async def _fetchone(self, sql: str, params: tuple[object, ...]) -> aiosqlite.Row | None:
 		cursor = await self.db.execute(sql, params)

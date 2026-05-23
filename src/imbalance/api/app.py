@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from imbalance.core.project import load_project
@@ -11,6 +11,8 @@ from imbalance.storage.db import open_db, run_migrations
 from imbalance.storage.store import SQLiteStore
 
 logger = logging.getLogger(__name__)
+
+MAX_BUDGET_TOKENS = 100000
 
 
 def create_app() -> FastAPI:
@@ -21,7 +23,7 @@ def create_app() -> FastAPI:
 
 	app.add_middleware(
 		CORSMiddleware,
-		allow_origins=['*'],
+		allow_origins=['http://localhost:3000', 'http://localhost:5173'],
 		allow_credentials=True,
 		allow_methods=['*'],
 		allow_headers=['*'],
@@ -67,6 +69,15 @@ def create_app() -> FastAPI:
 		query: str,
 		budget_tokens: int = 2000,
 	) -> dict[str, object]:
+		if not query.strip():
+			raise HTTPException(status_code=400, detail='Query cannot be empty')
+		if budget_tokens < 1:
+			raise HTTPException(status_code=400, detail='budget_tokens must be at least 1')
+		if budget_tokens > MAX_BUDGET_TOKENS:
+			raise HTTPException(
+				status_code=400, detail=f'budget_tokens must be at most {MAX_BUDGET_TOKENS}'
+			)
+
 		project = load_project()
 		db = await open_db(project.db_path)
 		await run_migrations(db)
