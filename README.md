@@ -31,15 +31,15 @@ local-first workflow:
 
 ## Current Capabilities
 
-| Area | Available in `0.1.0` |
-| --- | --- |
-| Project configuration | Upward discovery of `imbalance.toml` with local KB resolution |
-| Storage | SQLite WAL database, migrations, passive autocheckpoint, integrity check, FTS5 index |
-| Knowledge records | Wiki sections, history, tags, links, sessions, idempotent flush queue |
-| Reliability | Atomic pending checkpoint files, startup recovery primitive, retry backoff, circuit breaker |
-| Context engineering | `ContextPack`, memory-summary schema, rollout/raw memory schema, tool-result receipts |
-| CLI | `project`, `init-db`, `doctor`, `save-fact`, `search`, `session`, and `queue` commands |
-| Development | `uv` lockfile, Python 3.12 `.venv`, Ruff, mypy, pytest, dev container, git-cliff |
+| Area                  | Available in `0.1.0`                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| Project configuration | Upward discovery of `imbalance.toml` with local KB resolution                               |
+| Storage               | SQLite WAL database, migrations, passive autocheckpoint, integrity check, FTS5 index        |
+| Knowledge records     | Wiki sections, history, tags, links, sessions, idempotent flush queue                       |
+| Reliability           | Atomic pending checkpoint files, startup recovery primitive, retry backoff, circuit breaker |
+| Context engineering   | `ContextPack`, memory-summary schema, rollout/raw memory schema, tool-result receipts       |
+| CLI                   | `project`, `init-db`, `doctor`, `save-fact`, `search`, `session`, and `queue` commands      |
+| Development           | `uv` lockfile, Python 3.12 `.venv`, Ruff, mypy, pytest, dev container, git-cliff            |
 
 ## Architecture
 
@@ -157,19 +157,19 @@ can be run from nested folders inside the project.
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `imbalance project init` | Create `imbalance.toml` in the current repository |
-| `imbalance project info` | Show the resolved project and KB location |
-| `imbalance init-db` | Create/migrate the SQLite knowledge base |
-| `imbalance doctor` | Run database initialization and `integrity_check` |
-| `imbalance save-fact TEXT --section SECTION` | Store a knowledge record with optional tags and slug |
-| `imbalance search QUERY` | Return a budgeted `ContextPack` from FTS5 retrieval |
-| `imbalance session start` | Start a durable session and print its UUID |
-| `imbalance session checkpoint ID --summary TEXT` | Atomically persist a pending flush payload and enqueue it |
-| `imbalance session list` | Display session state and pending checkpoint location |
-| `imbalance queue status` | Display all queued flush payloads and retry metadata |
-| `imbalance queue recover` | Re-enqueue recoverable `pending_flush` sessions after interruption |
+| Command                                          | Purpose                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------ |
+| `imbalance project init`                         | Create `imbalance.toml` in the current repository                  |
+| `imbalance project info`                         | Show the resolved project and KB location                          |
+| `imbalance init-db`                              | Create/migrate the SQLite knowledge base                           |
+| `imbalance doctor`                               | Run database initialization and `integrity_check`                  |
+| `imbalance save-fact TEXT --section SECTION`     | Store a knowledge record with optional tags and slug               |
+| `imbalance search QUERY`                         | Return a budgeted `ContextPack` from FTS5 retrieval                |
+| `imbalance session start`                        | Start a durable session and print its UUID                         |
+| `imbalance session checkpoint ID --summary TEXT` | Atomically persist a pending flush payload and enqueue it          |
+| `imbalance session list`                         | Display session state and pending checkpoint location              |
+| `imbalance queue status`                         | Display all queued flush payloads and retry metadata               |
+| `imbalance queue recover`                        | Re-enqueue recoverable `pending_flush` sessions after interruption |
 
 ## Development Environment
 
@@ -177,18 +177,22 @@ can be run from nested folders inside the project.
 
 The repository includes a reproducible [`.devcontainer`](.devcontainer) environment with:
 
-| Tool | Version / Policy |
-| --- | --- |
-| Python | `3.12` |
-| `uv` | Installed from Astral's installer |
-| SQLite CLI | `3.46+` |
-| `git-cliff` | `2.13.1` binary |
+| Tool        | Version / Policy                  |
+| ----------- | --------------------------------- |
+| Python      | `3.12`                            |
+| `uv`        | Installed from Astral's installer |
+| SQLite CLI  | `3.46+`                           |
+| `git-cliff` | `2.13.1` binary                   |
 
 Opening the repository in the dev container automatically runs:
 
 ```bash
 UV_CACHE_DIR=.uv-cache uv sync --extra dev
 ```
+
+The dev container uses Prettier on save for Markdown, JSON, and YAML through
+`.prettierrc.json`. Python, SQL, and TOML remain outside Prettier ownership; Python formatting
+is handled by Ruff.
 
 ### Quality Checks
 
@@ -199,26 +203,26 @@ make typecheck
 make changelog-check
 ```
 
-| Target | Checks |
-| --- | --- |
-| `make test` | Unit and SQLite integration tests |
-| `make lint` | Ruff linting configured in `pyproject.toml` |
-| `make format` | Ruff formatter followed by safe autofixes |
-| `make typecheck` | mypy over `src/` |
-| `make doctor` | Local SQLite initialization and integrity validation |
-| `make changelog-check` | Changelog rendering through `git-cliff` |
+| Target                 | Checks                                               |
+| ---------------------- | ---------------------------------------------------- |
+| `make test`            | Unit and SQLite integration tests                    |
+| `make lint`            | Ruff linting configured in `pyproject.toml`          |
+| `make format`          | Ruff formatter followed by safe autofixes            |
+| `make typecheck`       | mypy over `src/`                                     |
+| `make doctor`          | Local SQLite initialization and integrity validation |
+| `make changelog-check` | Changelog rendering through `git-cliff`              |
 
 ## Storage Model
 
 The initial migrations create a compact schema:
 
-| Table / Index | Purpose |
-| --- | --- |
-| `wiki_sections` + `wiki_fts` | Durable knowledge and local full-text retrieval |
-| `wiki_history`, `wiki_tags`, `kb_links` | Audit trail and lightweight knowledge relationships |
-| `sessions`, `flush_queue` | Durable session state and idempotent retry scheduling |
-| `memory_summary`, `raw_memories`, `rollout_summaries` | Progressive context-memory layers |
-| `tool_result_receipts` | Compact references for large, re-fetchable tool output |
+| Table / Index                                         | Purpose                                                |
+| ----------------------------------------------------- | ------------------------------------------------------ |
+| `wiki_sections` + `wiki_fts`                          | Durable knowledge and local full-text retrieval        |
+| `wiki_history`, `wiki_tags`, `kb_links`               | Audit trail and lightweight knowledge relationships    |
+| `sessions`, `flush_queue`                             | Durable session state and idempotent retry scheduling  |
+| `memory_summary`, `raw_memories`, `rollout_summaries` | Progressive context-memory layers                      |
+| `tool_result_receipts`                                | Compact references for large, re-fetchable tool output |
 
 ## Roadmap
 

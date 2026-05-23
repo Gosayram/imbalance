@@ -1,0 +1,22 @@
+# Python is formatted by Ruff; SQL and TOML are intentionally outside Prettier ownership.
+*.py
+*.pyi
+*.sql
+*.toml
+uv.lock
+
+# Long-lived architecture drafts should change only through deliberate edits.
+.*-docs.md
+
+# Local state, caches, environments, and generated output.
+.data/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+.venv/
+__pycache__/
+build/
+dist/
+htmlcov/
+node_modules/
