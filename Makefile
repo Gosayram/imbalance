@@ -43,3 +43,6 @@ doctor: ## Run imbalance doctor for current project
 
 init-db: ## Initialize the current project's SQLite database
 	IMBALANCE_DATA_DIR=$(DEV_DATA_DIR) $(UV_RUN) run python -m imbalance.cli.app init-db
+
+coderabbit-review: ## Run CodeRabbit review and save report to .coderabbit-docs.md
+	@echo "Running CodeRabbit review..." && time $(UV_RUN) run sh -c 'coderabbit review > .coderabbit-docs.md 2>&1 || true' || echo "coderabbit not installed or failed"
