@@ -47,8 +47,11 @@ async def smart_merge_section(
 	existing: str,
 	new_content: str,
 	budget_tokens: int = 400,
+	db: aiosqlite.Connection | None = None,
 ) -> str:
 	if not existing.strip():
+		if db:
+			await _extract_links_from_content(router, db, kb_name, slug, new_content)
 		return new_content
 
 	existing_for_merge = existing[:2000] if len(existing) > 2000 else existing
@@ -61,7 +64,30 @@ async def smart_merge_section(
 		budget=budget_tokens,
 	)
 	merged = await router.complete(prompt, max_tokens=budget_tokens)
+	if db:
+		await _extract_links_from_content(router, db, kb_name, slug, merged)
 	return merged
+
+
+async def _extract_links_from_content(
+	router: ModelRouter,
+	db: aiosqlite.Connection,
+	kb_name: str,
+	source_slug: str,
+	content: str,
+) -> None:
+	rows = await db.execute_fetchall(
+		'SELECT slug FROM wiki_sections WHERE kb_name=? AND slug != ?',
+		(kb_name, source_slug),
+	)
+	existing_slugs = {r['slug'] for r in rows}
+	for existing_slug in existing_slugs:
+		if existing_slug in content or existing_slug.replace('/', '-') in content:
+			await db.execute(
+				'INSERT OR IGNORE INTO kb_links(kb_name, source_slug, target_slug, link_type) VALUES (?, ?, ?, ?)',
+				(kb_name, source_slug, existing_slug, 'references'),
+			)
+	await db.commit()
 
 
 class KBCompactor:
@@ -105,6 +131,7 @@ class KBCompactor:
 					content,
 					'Audit: check for staleness or contradictions.',
 					budget_tokens=300,
+					db=self.db,
 				)
 				token_count = max(1, len(merged.split()))
 				await self.db.execute(

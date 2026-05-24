@@ -985,6 +985,86 @@ async def _wiki_history(slug: str) -> None:
 		await db.close()
 
 
+@wiki_app.command('diff')
+def wiki_diff(
+	slug: Annotated[str, typer.Argument(help='Section slug')],
+	v1: Annotated[int, typer.Argument(help='First version number (1-based)')],
+	v2: Annotated[int, typer.Argument(help='Second version number (1-based)')],
+) -> None:
+	asyncio.run(_wiki_diff(slug, v1, v2))
+
+
+async def _wiki_diff(slug: str, v1: int, v2: int) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT content FROM wiki_history '
+			'WHERE kb_name=? AND slug=? ORDER BY id LIMIT ? OFFSET ?',
+			(project.name, slug, max(v1, v2), min(v1, v2) - 1),
+		)
+		if len(rows) < 2:
+			typer.echo('Not enough versions found')
+			return
+		content_v1 = rows[0]['content'] if v1 < v2 else rows[1]['content']
+		content_v2 = rows[1]['content'] if v1 < v2 else rows[0]['content']
+		lines1 = content_v1.splitlines()
+		lines2 = content_v2.splitlines()
+		for _i, (l1, l2) in enumerate(zip(lines1, lines2, strict=False), 1):
+			if l1 != l2:
+				typer.echo(f'-{l1}' if l1 else ' ')
+				typer.echo(f'+{l2}' if l2 else ' ')
+		for i in range(len(lines2) - len(lines1)):
+			typer.echo(f'+{lines2[len(lines1) + i]}')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('rollback')
+def wiki_rollback(
+	slug: Annotated[str, typer.Argument(help='Section slug')],
+	to: Annotated[str | None, typer.Option('--to', help='Date (YYYY-MM-DD) or version number')] = None,
+) -> None:
+	asyncio.run(_wiki_rollback(slug, to))
+
+
+async def _wiki_rollback(slug: str, to: str | None) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		if to.isdigit() if to else False:
+			offset = int(to) - 1
+			row = await db.execute_fetchone(
+				'SELECT content FROM wiki_history WHERE kb_name=? AND slug=? ORDER BY id LIMIT 1 OFFSET ?',
+				(project.name, slug, offset),
+			)
+			if not row:
+				typer.echo(f'Version {to} not found')
+				return
+			content = row['content']
+		else:
+			row = await db.execute_fetchone(
+				"SELECT content FROM wiki_history WHERE kb_name=? AND slug=? AND date(changed_at) <= ? ORDER BY id DESC LIMIT 1",
+				(project.name, slug, to),
+			)
+			if not row:
+				typer.echo(f'No version found on or before {to}')
+				return
+			content = row['content']
+		await db.execute(
+			'INSERT INTO wiki_history(kb_name, slug, content, changed_by, change_type) VALUES (?, ?, ?, ?, ?)',
+			(project.name, slug, content, 'rollback', 'rollback'),
+		)
+		await db.execute(
+			'UPDATE wiki_sections SET content=? WHERE kb_name=? AND slug=?',
+			(content, project.name, slug),
+		)
+		await db.commit()
+		typer.echo(f'Rolled back {slug} to version {to}')
+	finally:
+		await db.close()
+
+
 @app.command('export')
 def export_kb(
 	format: Annotated[str, typer.Option('--format', help='toml|sqlite')] = 'toml',
@@ -1093,11 +1173,30 @@ def scan_code(
 	extract: Annotated[
 		str | None, typer.Option('--extract', help='Filter: decisions|patterns|issues|notes')
 	] = None,
+	watch: Annotated[bool, typer.Option('--watch', help='Watch mode: re-scan on file changes')] = False,
 ) -> None:
 	"""Scan codebase for IMBALANCE: markers and import into KB."""
 	from imbalance.core.scanner import scan_directory
 
 	root = Path(directory).resolve()
+	if watch:
+		import time
+		typer.echo('Watching for changes... (Ctrl+C to stop)')
+		hashes: dict[Path, float] = {}
+		try:
+			while True:
+				time.sleep(2)
+				hits = scan_directory(root)
+				if extract:
+					hits = [h for h in hits if h.section == extract]
+				for hit in hits:
+					mtime = hit.file.stat().st_mtime
+					if hashes.get(hit.file) != mtime:
+						hashes[hit.file] = mtime
+						typer.echo(f'{hit.file.relative_to(root)}:{hit.line} [{hit.marker_type}] {hit.content}')
+		except KeyboardInterrupt:
+			typer.echo('\nStopped watching')
+			return
 	hits = scan_directory(root)
 	if extract:
 		hits = [h for h in hits if h.section == extract]
@@ -1147,6 +1246,91 @@ async def _eval_retrieval(
 		typer.echo(report.format_summary())
 	finally:
 		await db.close()
+
+
+eval_app = typer.Typer(help='Evaluation commands.')
+app.add_typer(eval_app, name='eval')
+
+
+@eval_app.command('run')
+def eval_run(
+	file: Annotated[str | None, typer.Option('--file', help='JSON file with eval queries')] = None,
+) -> None:
+	"""Run eval from ground truth or file."""
+	asyncio.run(_eval_run(file))
+
+
+async def _eval_run(file: str | None) -> None:
+	from imbalance.core.eval import EvalQuery, run_eval
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		store = SQLiteStore(db, project.name)
+		engine = QueryEngine(store, cache_ttl=0, confidence_weight=project.config.confidence_weight)
+
+		if file:
+			import json
+			queries = [EvalQuery(**q) for q in json.loads(Path(file).read_text())]
+		else:
+			rows = await db.execute_fetchall(
+				'SELECT query, expected_slugs FROM eval_ground_truth WHERE kb_name=?',
+				(project.name,),
+			)
+			queries = [
+				EvalQuery(query=r['query'], expected_slugs=json.loads(r['expected_slugs']))
+				for r in rows
+			]
+		if not queries:
+			typer.echo('No queries to evaluate')
+			return
+		report = await run_eval(queries, engine)
+		typer.echo(report.format_summary())
+	finally:
+		await db.close()
+
+
+@eval_app.command('record')
+def eval_record(
+	session: Annotated[str, typer.Option('--session', help='Session ID to record queries from')],
+) -> None:
+	"""Record queries from a session as ground truth."""
+	asyncio.run(_eval_record(session))
+
+
+async def _eval_record(session: str) -> None:
+	import json
+
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT query, returned_slugs FROM retrieval_log WHERE session_id=?',
+			(session,),
+		)
+		if not rows:
+			typer.echo(f'No retrieval log entries found for session {session}')
+			return
+		for r in rows:
+			expected = r['returned_slugs'].split(',') if r['returned_slugs'] else []
+			await db.execute(
+				'INSERT OR REPLACE INTO eval_ground_truth(kb_name, query, expected_slugs, source_session) VALUES (?, ?, ?, ?)',
+				(project.name, r['query'], json.dumps(expected), session),
+			)
+		await db.commit()
+		typer.echo(f'Recorded {len(rows)} queries from session {session}')
+	finally:
+		await db.close()
+
+
+@eval_app.command('compare')
+def eval_compare(
+	config1: Annotated[str, typer.Argument(help='First config name')],
+	config2: Annotated[str, typer.Argument(help='Second config name')],
+) -> None:
+	"""Compare two retrieval configs."""
+	typer.echo('A/B comparison coming soon')
 
 
 if __name__ == '__main__':

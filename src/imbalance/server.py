@@ -6,6 +6,7 @@ import logging
 import os
 import signal
 import time
+from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -56,6 +57,7 @@ class ImbalanceDaemon:
 
 		self._router = ModelRouter()
 		await self._process_flush_queue()
+		await self._check_notifications()
 
 		PID_FILE.parent.mkdir(parents=True, exist_ok=True)
 		PID_FILE.write_text(str(os.getpid()), encoding='utf-8')
@@ -96,6 +98,46 @@ class ImbalanceDaemon:
 				await self.db.commit()
 				next_retry = await queue.mark_failed(item.id, item.attempts + 1, str(e))
 				logger.warning(f'Flush for {item.session_id} failed, retry at {next_retry}: {e}')
+
+	async def _check_notifications(self) -> None:
+		if not self.db:
+			return
+		from imbalance.core.notifications import check_kb_health, notify_alerts
+
+		notif = self.project.config.notifications
+		if not notif.enabled:
+			return
+
+		queue_depth = await self.db.execute_fetchone(
+			'SELECT COUNT(*) as cnt FROM flush_queue',
+		)
+		depth = (queue_depth or {}).get('cnt', 0)
+
+		last_flush_row = await self.db.execute_fetchone(
+			"SELECT MAX(changed_at) as last FROM wiki_sections WHERE kb_name=?",
+			(self.project.name,),
+		)
+		last_flush = last_flush_row['last'] if last_flush_row else None
+		from datetime import datetime
+		if last_flush:
+			try:
+				last_dt = datetime.fromisoformat(last_flush.replace('Z', '+00:00'))
+				age_days = (datetime.now(UTC) - last_dt).total_seconds() / 86400
+			except Exception:
+				age_days = 0
+		else:
+			age_days = notif.kb_stale_days + 1
+
+		alerts = check_kb_health(
+			queue_depth=depth,
+			last_flush_age_days=age_days,
+			circuit_breaker_open=False,
+			queue_threshold=notif.queue_size_threshold,
+			stale_days=float(notif.kb_stale_days),
+		)
+		if alerts:
+			notify_alerts(alerts)
+			logger.info(f'Sent {len(alerts)} notification(s)')
 
 	async def shutdown(self) -> None:
 		async with self._shutdown_lock:

@@ -17,6 +17,14 @@ class InheritConfig:
 
 
 @dataclass(frozen=True)
+class NotificationConfig:
+	enabled: bool = True
+	queue_size_threshold: int = 5
+	kb_stale_days: int = 14
+	circuit_breaker_open: bool = True
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
 	name: str
 	version: str
@@ -30,6 +38,7 @@ class ProjectConfig:
 	confidence_weight: float = 0.05
 	conflict_mode: str = 'warn'
 	inherit: InheritConfig | None = None
+	notifications: NotificationConfig = NotificationConfig()
 
 
 @dataclass(frozen=True)
@@ -62,6 +71,7 @@ class Project:
 		retrieval = raw.get('retrieval', {})
 		quality = retrieval.get('quality', {})
 		kb_inherit = kb.get('inherit', {})
+		notifications = raw.get('notifications', {})
 
 		name = project.get('name')
 		if not name:
@@ -75,6 +85,12 @@ class Project:
 			)
 
 		store_path = os.getenv('IMBALANCE_KB_PATH') or kb.get('store_path')
+		notif = NotificationConfig(
+			enabled=bool(notifications.get('enabled', True)),
+			queue_size_threshold=int(notifications.get('queue_size_threshold', 5)),
+			kb_stale_days=int(notifications.get('kb_stale_days', 14)),
+			circuit_breaker_open=bool(notifications.get('circuit_breaker_open', True)),
+		)
 		config = ProjectConfig(
 			name=name,
 			version=str(project.get('version', '1')),
@@ -88,6 +104,7 @@ class Project:
 			confidence_weight=float(quality.get('confidence_weight', 0.05)),
 			conflict_mode=str(quality.get('conflict_mode', 'warn')),
 			inherit=inherit,
+			notifications=notif,
 		)
 		return cls(
 			root=path.parent,
