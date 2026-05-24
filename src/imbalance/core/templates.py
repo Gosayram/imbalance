@@ -110,10 +110,12 @@ def generate_agents_md(project_name: str) -> str:
 
 
 def generate_claude_md(template: str, project_name: str = 'Project') -> str:
+	import sys
 	if template not in TEMPLATES:
 		available = ', '.join(TEMPLATES.keys())
 		raise ValueError(f'Unknown template: {template}. Available: {available}')
-	return TEMPLATES[template].format(project=project_name)
+	python_version = f'{sys.version_info.major}.{sys.version_info.minor}'
+	return TEMPLATES[template].format(project=project_name, python_version=python_version)
 
 
 def generate_cursor_mdc(project_name: str) -> str:

@@ -95,8 +95,8 @@ def create_app() -> FastAPI:
 			await db.close()
 
 	@app.get('/status')
-	async def status():
-		return await api_status()
+	async def status(request: Request):
+		return await api_status(request)
 
 	@app.get('/context')
 	async def get_context(

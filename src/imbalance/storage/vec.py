@@ -8,30 +8,27 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-_VEC_AVAILABLE: bool | None = None
-
 
 async def is_vec_available(db: aiosqlite.Connection) -> bool:
-	global _VEC_AVAILABLE
-	if _VEC_AVAILABLE is not None:
-		return _VEC_AVAILABLE
 	try:
 		import sqlite_vec
 
 		await db.enable_load_extension(True)
 		sqlite_vec.load(db.conn)
 		await db.enable_load_extension(False)
-		_VEC_AVAILABLE = True
 		logger.info('sqlite-vec extension loaded')
+		return True
 	except Exception:
-		_VEC_AVAILABLE = False
 		logger.debug('sqlite-vec not available, using FTS5-only mode')
-	return _VEC_AVAILABLE
+		return False
 
 
-async def ensure_vec_table(db: aiosqlite.Connection, dimension: int = 768) -> bool:
+async def ensure_vec_table(db: aiosqlite.Connection, dimension: int | None = None) -> bool:
 	if not await is_vec_available(db):
 		return False
+	if dimension is None:
+		from imbalance.core.embeddings import OpenAICompatProvider
+		dimension = OpenAICompatProvider().dimension
 	await db.execute(
 		f'CREATE VIRTUAL TABLE IF NOT EXISTS wiki_vec USING vec0('
 		f'  embedding float[{dimension}]'
@@ -62,7 +59,6 @@ async def search_by_embedding(
 	embedding: list[float],
 	limit: int = 8,
 ) -> list[dict[str, Any]]:
-	emb_blob = _floats_to_blob(embedding)
 	rows = await db.execute_fetchall(
 		"""
 		SELECT v.rowid as section_id, v.distance
@@ -71,7 +67,7 @@ async def search_by_embedding(
 		ORDER BY v.distance
 		LIMIT ?
 		""",
-		(json.dumps([emb_blob]), limit),
+		(json.dumps(embedding), limit),
 	)
 	return [
 		{'section_id': dict(r)['section_id'], 'distance': dict(r)['distance']}
@@ -88,8 +84,3 @@ def _floats_to_blob(embedding: list[float]) -> bytes:
 	import struct
 
 	return struct.pack(f'{len(embedding)}f', *embedding)
-
-
-def reset_cache() -> None:
-	global _VEC_AVAILABLE
-	_VEC_AVAILABLE = None

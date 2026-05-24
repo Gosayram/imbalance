@@ -32,6 +32,29 @@ async def wiki_index(request: Request, include_archived: bool = False):
 		await db.close()
 
 
+@router.get('/wiki/{slug:path}/edit')
+async def wiki_edit_form(request: Request, slug: str):
+	from imbalance.core.project import load_project
+	from imbalance.storage.db import open_db, run_migrations
+
+	project = load_project()
+	db = await open_db(project.db_path)
+	try:
+		await run_migrations(db)
+		row = await db.execute_fetchall(
+			'SELECT slug, section, content FROM wiki_sections WHERE kb_name=? AND slug=?',
+			(project.name, slug),
+		)
+		if not row:
+			from fastapi import HTTPException
+			raise HTTPException(status_code=404, detail='Section not found')
+		return request.app.state.templates.TemplateResponse(
+			'wiki/edit.html', {'request': request, 'section': dict(row[0])}
+		)
+	finally:
+		await db.close()
+
+
 @router.get('/wiki/{slug:path}')
 async def wiki_view(request: Request, slug: str):
 	import mistune
@@ -56,29 +79,6 @@ async def wiki_view(request: Request, slug: str):
 		r['html_content'] = md(r['content'])
 		return request.app.state.templates.TemplateResponse(
 			'wiki/view.html', {'request': request, 'section': r}
-		)
-	finally:
-		await db.close()
-
-
-@router.get('/wiki/{slug:path}/edit')
-async def wiki_edit_form(request: Request, slug: str):
-	from imbalance.core.project import load_project
-	from imbalance.storage.db import open_db, run_migrations
-
-	project = load_project()
-	db = await open_db(project.db_path)
-	try:
-		await run_migrations(db)
-		row = await db.execute_fetchall(
-			'SELECT slug, section, content FROM wiki_sections WHERE kb_name=? AND slug=?',
-			(project.name, slug),
-		)
-		if not row:
-			from fastapi import HTTPException
-			raise HTTPException(status_code=404, detail='Section not found')
-		return request.app.state.templates.TemplateResponse(
-			'wiki/edit.html', {'request': request, 'section': dict(row[0])}
 		)
 	finally:
 		await db.close()
