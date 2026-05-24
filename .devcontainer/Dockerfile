@@ -16,7 +16,7 @@ RUN apt-get update \
 		sqlite3 \
 	&& rm -rf /var/lib/apt/lists/*
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && install /root/.local/bin/uv /usr/local/bin/uv
 
 RUN case "${TARGETARCH}" in \
 		"amd64") GIT_CLIFF_ARCH="x86_64" ;; \
@@ -32,7 +32,7 @@ RUN case "${TARGETARCH}" in \
 
 RUN groupadd -g 1000 app && useradd -m -u 1000 -g app app
 
-ENV PATH="/home/app/.local/bin:$PATH" \
+ENV PATH="/usr/local/bin:/home/app/.local/bin:$PATH" \
 	HOME="/home/app"
 
 RUN mkdir -p /workspaces/imbalance && chown -R app:app /workspaces

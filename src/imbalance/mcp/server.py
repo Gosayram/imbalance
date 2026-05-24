@@ -75,7 +75,7 @@ async def handle_list_tools() -> list[types.Tool]:
 		openWorldHint=True,
 	)
 	return [
-		types.Tool(
+types.Tool(
 			name='get_context',
 			description='Retrieve relevant context from the knowledge base (read-only, safe)',
 			inputSchema={
@@ -90,7 +90,7 @@ async def handle_list_tools() -> list[types.Tool]:
 			},
 			annotations=annotations_readonly,
 		),
-types.Tool(
+		types.Tool(
 			name='save_fact',
 			description='Save a fact or decision to the knowledge base',
 			inputSchema={
@@ -114,36 +114,6 @@ types.Tool(
 				'properties': {
 					'session_id': {'type': 'string', 'description': 'Session UUID'},
 					'summary': {'type': 'string', 'description': 'Session summary'},
-					'decisions': {'type': 'array', 'items': {'type': 'string'}},
-					'next_steps': {'type': 'array', 'items': {'type': 'string'}},
-				},
-				'required': ['session_id', 'summary'],
-			},
-			annotations=annotations_flush,
-		),
-		types.Tool(
-			name='save_fact',
-			description='Save a fact or decision to the knowledge base',
-			inputSchema={
-				'type': 'object',
-				'properties': {
-					'content': {'type': 'string', 'description': 'Content to save'},
-					'section': {'type': 'string', 'default': 'context'},
-					'slug': {'type': 'string'},
-					'tags': {'type': 'array', 'items': {'type': 'string'}},
-					'session_id': {'type': 'string'},
-				},
-				'required': ['content'],
-			},
-		),
-types.Tool(
-			name='flush_session',
-			description='Flush session summary to knowledge base',
-			inputSchema={
-				'type': 'object',
-				'properties': {
-					'session_id': {'type': 'string'},
-					'summary': {'type': 'string'},
 					'decisions': {'type': 'array', 'items': {'type': 'string'}},
 					'next_steps': {'type': 'array', 'items': {'type': 'string'}},
 				},
