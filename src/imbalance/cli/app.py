@@ -184,7 +184,7 @@ def daemon_stop() -> None:
 
 	try:
 		pid = int(PID_FILE.read_text().strip())
-	except ValueError, OSError:
+	except (ValueError, OSError):
 		typer.echo('Invalid PID file')
 		raise typer.Exit(code=1) from None
 
@@ -355,6 +355,46 @@ async def _queue_retry(session_id: str | None) -> None:
 			typer.echo(f'reset {recovered} items')
 	finally:
 		await db.close()
+
+
+@app.command('claude-code')
+def claude_code_setup() -> None:
+	"""Auto-configure Claude Code settings.json for imbalance MCP."""
+	asyncio.run(_claude_code_setup())
+
+
+@app.command('mcp')
+def mcp() -> None:
+	"""Run the MCP server."""
+	from imbalance.mcp.server import main
+
+	asyncio.run(main())
+
+
+async def _claude_code_setup() -> None:
+	import json
+	from pathlib import Path
+
+	config_path = Path.home() / '.config' / 'claude-code' / 'settings.json'
+	config_path.parent.mkdir(parents=True, exist_ok=True)
+
+	settings: dict[str, object] = {}
+	if config_path.exists():
+		settings = json.loads(config_path.read_text())
+
+	mcp_servers = settings.setdefault('mcpServers', {})
+	mcp_servers['imbalance'] = {
+		'command': 'imbalance',
+		'args': ['mcp'],
+	}
+
+	config_path.write_text(json.dumps(settings, indent=2) + '\n')
+	typer.echo(f'Claude Code configured: {config_path}')
+	project = load_project()
+	await _open_project_db(project)
+	project.kb_dir.mkdir(parents=True, exist_ok=True)
+	(project.kb_dir / 'pending').mkdir(parents=True, exist_ok=True)
+	typer.echo('Ready for imbalance MCP')
 
 
 async def _open_project_db(project: Project):

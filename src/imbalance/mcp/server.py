@@ -72,6 +72,22 @@ async def handle_list_tools() -> list[types.Tool]:
 			description='Get current KB status and stats',
 			inputSchema={'type': 'object', 'properties': {}},
 		),
+		types.Tool(
+			name='list_topics',
+			description='List all topics/sections in the KB',
+			inputSchema={'type': 'object', 'properties': {}},
+		),
+		types.Tool(
+			name='resume_session',
+			description='Resume a pending session after crash',
+			inputSchema={
+				'type': 'object',
+				'properties': {
+					'session_id': {'type': 'string', 'description': 'Session UUID to resume'},
+				},
+				'required': ['session_id'],
+			},
+		),
 	]
 
 
@@ -96,6 +112,10 @@ async def handle_call_tool(
 			return await _flush_session(db, project, arguments)
 		if name == 'get_status':
 			return await _get_status(db, project.name)
+		if name == 'list_topics':
+			return await _list_topics(db, project.name)
+		if name == 'resume_session':
+			return await _resume_session(db, project, arguments)
 		raise ValueError(f'Unknown tool: {name}')
 	finally:
 		await db.close()
@@ -163,6 +183,40 @@ async def _get_status(db: Any, kb_name: str) -> list[types.TextContent]:
 			text=f'Sessions: {session_count}\nWiki sections: {wiki_rows}\nPending queue: {queue_count}',
 		)
 	]
+
+
+async def _list_topics(db: Any, kb_name: str) -> list[types.TextContent]:
+	rows = await db.execute_fetchall(
+		'SELECT section, slug FROM wiki_sections WHERE kb_name=? AND archived=FALSE ORDER BY section, slug',
+		(kb_name,),
+	)
+	topics = [f'{r["section"]}/{r["slug"]}' for r in rows]
+	return [types.TextContent(type='text', text='\n'.join(topics) if topics else 'No topics found')]
+
+
+async def _resume_session(
+	db: Any, project: Project, arguments: dict[str, Any]
+) -> list[types.TextContent]:
+	from imbalance.core.session import SessionManager
+
+	session_id = arguments.get('session_id')
+	if not session_id:
+		raise ValueError('session_id required')
+
+	manager = SessionManager(db=db, kb_name=project.name, pending_dir=project.kb_dir / 'pending')
+	session = await manager.get(session_id)
+	if session is None:
+		raise ValueError(f'Unknown session: {session_id}')
+
+	if session.status == 'active':
+		return [types.TextContent(type='text', text=f'Session {session_id} already active')]
+
+	await db.execute(
+		"UPDATE sessions SET status='active' WHERE id=?",
+		(session_id,),
+	)
+	await db.commit()
+	return [types.TextContent(type='text', text=f'Resumed session {session_id}')]
 
 
 async def main() -> None:
