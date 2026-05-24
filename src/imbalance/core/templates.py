@@ -79,9 +79,73 @@ TEMPLATES = {
 """,
 }
 
+# Universal AGENTS.md content
+AGENTS_MD_CONTENT = """\
+# {project} — AI Context for Agents
+
+## Memory Protocol
+At session start: call `get_context` with task description.
+After each decision: call `save_fact` immediately.
+At session end: call `flush_session`.
+Token budget: 2000.
+
+## Workflow
+1. `imbalance get-context "current task"` — load relevant context
+2. Make changes to codebase
+3. `imbalance save-fact "decision content" --section decisions --tags auth` — record key decisions
+4. `imbalance report-context-usage` — monitor token budget
+
+## Sections Available
+- `decisions/` — architecture, tech choices
+- `stack/` — frameworks, versions, dependencies
+- `patterns/` — code patterns, conventions
+- `constraints/` — limitations, requirements
+- `context/` — general project state
+"""
+
+# Agent-specific generators
+def generate_agents_md(project_name: str) -> str:
+	"""Generate AGENTS.md content (cross-agent standard)."""
+	return AGENTS_MD_CONTENT.format(project=project_name)
+
 
 def generate_claude_md(template: str, project_name: str = 'Project') -> str:
 	if template not in TEMPLATES:
 		available = ', '.join(TEMPLATES.keys())
 		raise ValueError(f'Unknown template: {template}. Available: {available}')
 	return TEMPLATES[template].format(project=project_name)
+
+
+def generate_cursor_mdc(project_name: str) -> str:
+	"""Generate .cursor/rules/imbalance.mdc content."""
+	return f"""---
+description: imbalance knowledge base integration for {project_name}
+alwaysApply: true
+---
+
+# imbalance KB
+
+At session start: call `get_context` with current task.
+After each significant decision: `save_fact`.
+At session end: `flush_session`.
+
+MCP server: running at http://localhost:4731/mcp/sse
+Project: auto-detected from cwd.
+"""
+
+
+def generate_gemini_md(project_name: str) -> str:
+	"""Generate GEMINI.md content."""
+	return AGENTS_MD_CONTENT.format(project=project_name)
+
+
+def generate_copilot_section(project_name: str) -> str:
+	"""Generate copilot instructions section."""
+	return """<!-- imbalance -->
+# imbalance KB Integration
+
+At session start: `imbalance get-context "task"`
+After decisions: `imbalance save-fact "content" --section decisions`
+At session end: `imbalance flush-session`
+<!-- /imbalance -->
+"""

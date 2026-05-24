@@ -23,10 +23,25 @@ server = Server('imbalance')
 
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
+	annotations_readonly = types.ToolAnnotations(
+		readOnlyHint=True,
+		idempotentHint=True,
+		openWorldHint=False,
+	)
+	annotations_write = types.ToolAnnotations(
+		readOnlyHint=False,
+		idempotentHint=True,
+		openWorldHint=False,
+	)
+	annotations_flush = types.ToolAnnotations(
+		readOnlyHint=False,
+		idempotentHint=False,
+		openWorldHint=True,
+	)
 	return [
 		types.Tool(
 			name='get_context',
-			description='Retrieve relevant context from the knowledge base',
+			description='Retrieve relevant context from the knowledge base (read-only, safe)',
 			inputSchema={
 				'type': 'object',
 				'properties': {
@@ -37,6 +52,38 @@ async def handle_list_tools() -> list[types.Tool]:
 				},
 				'required': ['query'],
 			},
+			annotations=annotations_readonly,
+		),
+		types.Tool(
+			name='save_fact',
+			description='Save a fact or decision to the knowledge base',
+			inputSchema={
+				'type': 'object',
+				'properties': {
+					'content': {'type': 'string', 'description': 'Content to save'},
+					'section': {'type': 'string', 'default': 'context'},
+					'slug': {'type': 'string'},
+					'tags': {'type': 'array', 'items': {'type': 'string'}},
+					'session_id': {'type': 'string'},
+				},
+				'required': ['content'],
+			},
+			annotations=annotations_write,
+		),
+		types.Tool(
+			name='flush_session',
+			description='Flush session to KB via LLM (makes network request to OpenRouter)',
+			inputSchema={
+				'type': 'object',
+				'properties': {
+					'session_id': {'type': 'string', 'description': 'Session UUID'},
+					'summary': {'type': 'string', 'description': 'Session summary'},
+					'decisions': {'type': 'array', 'items': {'type': 'string'}},
+					'next_steps': {'type': 'array', 'items': {'type': 'string'}},
+				},
+				'required': ['session_id', 'summary'],
+			},
+			annotations=annotations_flush,
 		),
 		types.Tool(
 			name='save_fact',
@@ -333,6 +380,54 @@ async def _save_compaction_summary(
 			),
 		)
 	]
+
+
+# Global project for resources
+_project: Project | None = None
+
+
+@server.list_resources()
+async def list_resources() -> list[types.Resource]:
+	"""List wiki sections as MCP resources."""
+	global _project
+	if _project is None:
+		_project = load_project()
+	db = await open_db(_project.db_path)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT slug, section, updated_at FROM wiki_sections '
+			"WHERE kb_name=? AND archived=FALSE ORDER BY section, slug",
+			(_project.name,),
+		)
+		return [
+			types.Resource(
+				uri=f'imbalance://kb/{_project.name}/{row["slug"]}',
+				name=row['slug'],
+				description=f"Wiki section: {row['section']} (updated {row['updated_at'][:10]})",
+				mimeType='text/markdown',
+			)
+			for row in rows
+		]
+	finally:
+		await db.close()
+
+
+@server.read_resource()
+async def read_resource(uri: str) -> str:
+	"""Return wiki section content by URI."""
+	global _project
+	if _project is None:
+		_project = load_project()
+	db = await open_db(_project.db_path)
+	try:
+		slug = uri.split('/', 3)[-1]
+		row = await db.execute_fetchone(
+			'SELECT content FROM wiki_sections WHERE kb_name=? AND slug=?',
+			(_project.name, slug),
+		)
+		return row['content'] if row else ''
+	finally:
+		await db.close()
 
 
 async def main() -> None:

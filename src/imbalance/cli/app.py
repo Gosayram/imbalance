@@ -446,6 +446,15 @@ async def _queue_retry(session_id: str | None) -> None:
 		await db.close()
 
 
+@app.command('setup')
+def setup_all_agents(
+	agent: Annotated[str | None, typer.Option('--agent', help='Specific agent: claude|cursor|codex|gemini|windsurf|copilot|all')] = None,
+	force: Annotated[bool, typer.Option('--force')] = False,
+) -> None:
+	"""Generate agent files for all supported agents. Creates AGENTS.md as primary."""
+	asyncio.run(_setup_all_agents(agent, force))
+
+
 @app.command('claude-code')
 def claude_code_setup(
 	template: Annotated[
@@ -516,6 +525,134 @@ def _session_manager(db, project: Project) -> SessionManager:
 @embeddings_app.command('status')
 def embeddings_status() -> None:
 	asyncio.run(_embeddings_status())
+
+
+async def _setup_all_agents(agent: str | None, force: bool) -> None:
+	"""Generate agent files for all supported agents."""
+	from imbalance.core.templates import (
+		generate_agents_md,
+		generate_copilot_section,
+		generate_cursor_mdc,
+		generate_gemini_md,
+	)
+
+	project = load_project()
+	cwd = Path.cwd()
+	agents_list = agent.split(',') if agent else ['all']
+
+	# Generate AGENTS.md as primary
+	agents_content = generate_agents_md(project.name)
+	agents_path = cwd / 'AGENTS.md'
+	if not agents_path.exists() or force:
+		agents_path.write_text(agents_content, encoding='utf-8')
+		typer.echo(f'Created {agents_path}')
+
+	if 'all' in agents_list or 'claude' in agents_list or 'gemini' in agents_list:
+		_claude_path = cwd / 'CLAUDE.md'
+		if _claude_path.exists() and not force and not _is_managed_file(_claude_path):
+			_append_section(_claude_path, agents_content)
+		else:
+			try:
+				_claude_path.symlink_to(agents_path)
+				typer.echo(f'Linked {agents_path} -> CLAUDE.md')
+			except OSError:
+				_claude_path.write_text(agents_content, encoding='utf-8')
+				typer.echo('Created CLAUDE.md (copy fallback)')
+
+		_gemini_path = cwd / 'GEMINI.md'
+		if _gemini_path.exists() and not force and not _is_managed_file(_gemini_path):
+			_append_section(_gemini_path, agents_content)
+		else:
+			try:
+				_gemini_path.symlink_to(agents_path)
+				typer.echo(f'Linked {agents_path} -> GEMINI.md')
+			except OSError:
+				_gemini_path.write_text(generate_gemini_md(project.name), encoding='utf-8')
+
+	if 'all' in agents_list or 'cursor' in agents_list:
+		cursor_dir = cwd / '.cursor' / 'rules'
+		cursor_dir.mkdir(parents=True, exist_ok=True)
+		(cursor_dir / 'imbalance.mdc').write_text(generate_cursor_mdc(project.name), encoding='utf-8')
+		typer.echo('Created .cursor/rules/imbalance.mdc')
+
+	if 'all' in agents_list or 'copilot' in agents_list:
+		copilot_file = cwd / '.github' / 'copilot-instructions.md'
+		copilot_file.parent.mkdir(parents=True, exist_ok=True)
+		_append_section(copilot_file, generate_copilot_section(project.name))
+		typer.echo('Updated .github/copilot-instructions.md')
+
+	if 'all' in agents_list or 'codex' in agents_list:
+		typer.echo('AGENTS.md is the primary file for Codex CLI')
+
+	if 'all' in agents_list or 'claude' in agents_list:
+		_skills_dir = Path.home() / '.claude' / 'skills'
+		_skills_dir.mkdir(parents=True, exist_ok=True)
+		(_skills_dir / 'imbalance-load' / 'SKILL.md').parent.mkdir(parents=True, exist_ok=True)
+		(_skills_dir / 'imbalance-load' / 'SKILL.md').write_text(
+			'---\nname: imbalance-load\ndescription: Load project context from imbalance KB\n---\n'
+			'Call `get_context` MCP tool with current task.\nBudget: 2000 tokens.',
+			encoding='utf-8',
+		)
+		(_skills_dir / 'imbalance-flush' / 'SKILL.md').parent.mkdir(parents=True, exist_ok=True)
+		(_skills_dir / 'imbalance-flush' / 'SKILL.md').write_text(
+			'---\nname: imbalance-flush\ndescription: Save session to KB\n---\n'
+			'1. Call `flush_session` with summary, decisions, next_steps.\n2. Confirm session saved.',
+			encoding='utf-8',
+		)
+		typer.echo('Created ~/.claude/skills/imbalance-load and imbalance-flush skills')
+
+	if 'all' in agents_list or 'codex' in agents_list:
+		_codex_skills_dir = Path.home() / '.agents' / 'skills'
+		_codex_skills_dir.mkdir(parents=True, exist_ok=True)
+		(_codex_skills_dir / 'imbalance-load' / 'SKILL.md').parent.mkdir(parents=True, exist_ok=True)
+		(_codex_skills_dir / 'imbalance-load' / 'SKILL.md').write_text(
+			'---\nname: imbalance-load\ndescription: Load project context\n---\n'
+			'Call get_context with task description. Budget: 2000 tokens.',
+			encoding='utf-8',
+		)
+		typer.echo('Created ~/.agents/skills/imbalance-load skill for Codex')
+
+	# MCP config generation
+	if 'all' in agents_list or 'mcp' in agents_list:
+		_mcp_config(cwd)
+
+
+def _mcp_config(cwd: Path) -> None:
+	"""Generate MCP config files for all detected agents."""
+	import json
+
+	# Cursor: .cursor/mcp.json
+	cursor_mcp = cwd / '.cursor' / 'mcp.json'
+	cursor_mcp.parent.mkdir(parents=True, exist_ok=True)
+	existing = json.loads(cursor_mcp.read_text()) if cursor_mcp.exists() else {}
+	servers = existing.setdefault('mcpServers', {})
+	servers['imbalance'] = {'url': 'http://localhost:4731/mcp/sse'}
+	cursor_mcp.write_text(json.dumps(existing, indent=2) + '\n')
+	typer.echo('Updated .cursor/mcp.json')
+
+	# VSCode/Cline: .vscode/settings.json
+	vsc_settings = cwd / '.vscode' / 'settings.json'
+	vsc_settings.parent.mkdir(parents=True, exist_ok=True)
+	vsc_existing = json.loads(vsc_settings.read_text()) if vsc_settings.exists() else {}
+	cline_servers = vsc_existing.setdefault('cline.mcpServers', {})
+	cline_servers['imbalance'] = {'url': 'http://localhost:4731/mcp/sse'}
+	vsc_settings.write_text(json.dumps(vsc_existing, indent=2) + '\n')
+	typer.echo('Updated .vscode/settings.json')
+
+
+def _is_managed_file(path: Path) -> bool:
+	try:
+		content = path.read_text()
+		return '<!-- managed by imbalance' in content
+	except Exception:
+		return False
+
+
+def _append_section(path: Path, section: str) -> None:
+	content = path.read_text() if path.exists() else ''
+	marker = '<!-- imbalance -->'
+	if marker not in content:
+		path.write_text(content + '\n\n' + section, encoding='utf-8')
 
 
 async def _embeddings_status() -> None:
