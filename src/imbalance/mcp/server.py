@@ -54,7 +54,7 @@ async def handle_list_tools() -> list[types.Tool]:
 			},
 			annotations=annotations_readonly,
 		),
-		types.Tool(
+types.Tool(
 			name='save_fact',
 			description='Save a fact or decision to the knowledge base',
 			inputSchema={
@@ -100,7 +100,7 @@ async def handle_list_tools() -> list[types.Tool]:
 				'required': ['content'],
 			},
 		),
-		types.Tool(
+types.Tool(
 			name='flush_session',
 			description='Flush session summary to knowledge base',
 			inputSchema={
@@ -113,16 +113,19 @@ async def handle_list_tools() -> list[types.Tool]:
 				},
 				'required': ['session_id', 'summary'],
 			},
+			annotations=annotations_flush,
 		),
 		types.Tool(
 			name='get_status',
 			description='Get current KB status and stats',
 			inputSchema={'type': 'object', 'properties': {}},
+			annotations=annotations_readonly,
 		),
 		types.Tool(
 			name='list_topics',
 			description='List all topics/sections in the KB',
 			inputSchema={'type': 'object', 'properties': {}},
+			annotations=annotations_readonly,
 		),
 		types.Tool(
 			name='resume_session',
@@ -134,6 +137,7 @@ async def handle_list_tools() -> list[types.Tool]:
 				},
 				'required': ['session_id'],
 			},
+			annotations=annotations_write,
 		),
 		types.Tool(
 			name='report_context_usage',
@@ -147,6 +151,7 @@ async def handle_list_tools() -> list[types.Tool]:
 				},
 				'required': ['used_tokens', 'total_tokens'],
 			},
+			annotations=annotations_readonly,
 		),
 		types.Tool(
 			name='save_compaction_summary',
@@ -162,6 +167,7 @@ async def handle_list_tools() -> list[types.Tool]:
 				},
 				'required': ['session_id', 'summary'],
 			},
+			annotations=annotations_write,
 		),
 	]
 

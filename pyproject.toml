@@ -32,6 +32,9 @@ ui = ["jinja2>=3.1.6,<4", "mistune>=3.2.1,<4", "python-multipart>=0.0.29,<0.1"]
 git = ["gitpython>=3.1.50,<4"]
 all = ["imbalance[ollama,openai,compress,ui,git]"]
 
+[project.scripts]
+imbalance = "imbalance.cli.app:app"
+
 [build-system]
 requires = ["hatchling>=1.29,<2"]
 build-backend = "hatchling.build"

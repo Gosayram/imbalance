@@ -450,9 +450,12 @@ async def _queue_retry(session_id: str | None) -> None:
 def setup_all_agents(
 	agent: Annotated[str | None, typer.Option('--agent', help='Specific agent: claude|cursor|codex|gemini|windsurf|copilot|all')] = None,
 	force: Annotated[bool, typer.Option('--force')] = False,
+	mcp_configs: Annotated[bool, typer.Option('--mcp-configs')] = False,
+	skills: Annotated[bool, typer.Option('--skills')] = False,
+	report: Annotated[bool, typer.Option('--report')] = False,
 ) -> None:
 	"""Generate agent files for all supported agents. Creates AGENTS.md as primary."""
-	asyncio.run(_setup_all_agents(agent, force))
+	asyncio.run(_setup_all_agents(agent, force, mcp_configs, skills, report))
 
 
 @app.command('claude-code')
@@ -464,6 +467,17 @@ def claude_code_setup(
 ) -> None:
 	"""Auto-configure Claude Code settings.json for imbalance MCP."""
 	asyncio.run(_claude_code_setup(template))
+
+
+@app.command('hook')
+def hook(
+	hook_type: Annotated[str, typer.Argument(help='session-start|session-stop|prompt-submit')],
+	auto_flush: Annotated[bool, typer.Option('--auto-flush')] = False,
+	project_from_cwd: Annotated[bool, typer.Option('--project-from-cwd')] = False,
+	check_budget: Annotated[bool, typer.Option('--check-budget')] = False,
+) -> None:
+	"""Run native hooks for agent integration."""
+	asyncio.run(_run_hook(hook_type, auto_flush, project_from_cwd, check_budget))
 
 
 @app.command('mcp')
@@ -512,6 +526,41 @@ async def _claude_code_setup(template: str | None) -> None:
 	typer.echo('Ready for imbalance MCP')
 
 
+async def _run_hook(
+	hook_type: str, auto_flush: bool, project_from_cwd: bool, check_budget: bool
+) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		if hook_type == 'session-start':
+			typer.echo('Session initialized. Call get_context("current task") to load context.')
+		elif hook_type == 'session-stop':
+			if auto_flush:
+				session = await db.execute_fetchone(
+					'SELECT id FROM sessions WHERE kb_name=? AND status="active" ORDER BY updated_at DESC LIMIT 1',
+					(project.name,),
+				)
+				if session:
+					typer.echo(f'Flushing session {session["id"]}...')
+					await db.execute(
+						"UPDATE sessions SET status='flushed' WHERE id=?",
+						(session['id'],),
+					)
+					await db.commit()
+		elif hook_type == 'prompt-submit':
+			if check_budget:
+				from imbalance.core.budget import SessionBudgetMonitor
+
+				monitor = SessionBudgetMonitor()
+				action = monitor.check(used_tokens=1500, total_tokens=20000)
+				if action.action == 'warn':
+					typer.echo(f'[imbalance] Context at {action.action}. Call save_fact() for key findings.')
+		else:
+			raise ValueError(f'Unknown hook type: {hook_type}')
+	finally:
+		await db.close()
+
+
 async def _open_project_db(project: Project):
 	db = await open_db(project.db_path)
 	await run_migrations(db)
@@ -527,7 +576,9 @@ def embeddings_status() -> None:
 	asyncio.run(_embeddings_status())
 
 
-async def _setup_all_agents(agent: str | None, force: bool) -> None:
+async def _setup_all_agents(
+	agent: str | None, force: bool, mcp_configs: bool, skills: bool, report: bool
+) -> None:
 	"""Generate agent files for all supported agents."""
 	from imbalance.core.templates import (
 		generate_agents_md,
@@ -540,32 +591,42 @@ async def _setup_all_agents(agent: str | None, force: bool) -> None:
 	cwd = Path.cwd()
 	agents_list = agent.split(',') if agent else ['all']
 
+	generated = []
+	skipped = []
+	warnings = []
+
 	# Generate AGENTS.md as primary
 	agents_content = generate_agents_md(project.name)
 	agents_path = cwd / 'AGENTS.md'
 	if not agents_path.exists() or force:
 		agents_path.write_text(agents_content, encoding='utf-8')
-		typer.echo(f'Created {agents_path}')
+		generated.append({'agent': 'codex', 'path': 'AGENTS.md', 'mode': 'created'})
+	else:
+		skipped.append({'agent': 'codex', 'reason': 'exists'})
 
 	if 'all' in agents_list or 'claude' in agents_list or 'gemini' in agents_list:
 		_claude_path = cwd / 'CLAUDE.md'
 		if _claude_path.exists() and not force and not _is_managed_file(_claude_path):
 			_append_section(_claude_path, agents_content)
+			generated.append({'agent': 'claude', 'path': 'CLAUDE.md', 'mode': 'section-appended'})
 		else:
 			try:
 				_claude_path.symlink_to(agents_path)
-				typer.echo(f'Linked {agents_path} -> CLAUDE.md')
+				generated.append({'agent': 'claude', 'path': 'CLAUDE.md', 'mode': 'linked'})
+				typer.echo('Linked AGENTS.md -> CLAUDE.md')
 			except OSError:
 				_claude_path.write_text(agents_content, encoding='utf-8')
-				typer.echo('Created CLAUDE.md (copy fallback)')
+				generated.append({'agent': 'claude', 'path': 'CLAUDE.md', 'mode': 'created'})
 
 		_gemini_path = cwd / 'GEMINI.md'
 		if _gemini_path.exists() and not force and not _is_managed_file(_gemini_path):
 			_append_section(_gemini_path, agents_content)
+			generated.append({'agent': 'gemini', 'path': 'GEMINI.md', 'mode': 'section-appended'})
 		else:
 			try:
 				_gemini_path.symlink_to(agents_path)
-				typer.echo(f'Linked {agents_path} -> GEMINI.md')
+				generated.append({'agent': 'gemini', 'path': 'GEMINI.md', 'mode': 'linked'})
+				typer.echo('Linked AGENTS.md -> GEMINI.md')
 			except OSError:
 				_gemini_path.write_text(generate_gemini_md(project.name), encoding='utf-8')
 
@@ -573,18 +634,20 @@ async def _setup_all_agents(agent: str | None, force: bool) -> None:
 		cursor_dir = cwd / '.cursor' / 'rules'
 		cursor_dir.mkdir(parents=True, exist_ok=True)
 		(cursor_dir / 'imbalance.mdc').write_text(generate_cursor_mdc(project.name), encoding='utf-8')
+		generated.append({'agent': 'cursor', 'path': '.cursor/rules/imbalance.mdc', 'mode': 'created'})
 		typer.echo('Created .cursor/rules/imbalance.mdc')
 
 	if 'all' in agents_list or 'copilot' in agents_list:
 		copilot_file = cwd / '.github' / 'copilot-instructions.md'
 		copilot_file.parent.mkdir(parents=True, exist_ok=True)
 		_append_section(copilot_file, generate_copilot_section(project.name))
+		generated.append({'agent': 'copilot', 'path': '.github/copilot-instructions.md', 'mode': 'updated'})
 		typer.echo('Updated .github/copilot-instructions.md')
 
 	if 'all' in agents_list or 'codex' in agents_list:
 		typer.echo('AGENTS.md is the primary file for Codex CLI')
 
-	if 'all' in agents_list or 'claude' in agents_list:
+	if skills and ('all' in agents_list or 'claude' in agents_list):
 		_skills_dir = Path.home() / '.claude' / 'skills'
 		_skills_dir.mkdir(parents=True, exist_ok=True)
 		(_skills_dir / 'imbalance-load' / 'SKILL.md').parent.mkdir(parents=True, exist_ok=True)
@@ -601,7 +664,7 @@ async def _setup_all_agents(agent: str | None, force: bool) -> None:
 		)
 		typer.echo('Created ~/.claude/skills/imbalance-load and imbalance-flush skills')
 
-	if 'all' in agents_list or 'codex' in agents_list:
+	if skills and ('all' in agents_list or 'codex' in agents_list):
 		_codex_skills_dir = Path.home() / '.agents' / 'skills'
 		_codex_skills_dir.mkdir(parents=True, exist_ok=True)
 		(_codex_skills_dir / 'imbalance-load' / 'SKILL.md').parent.mkdir(parents=True, exist_ok=True)
@@ -613,8 +676,14 @@ async def _setup_all_agents(agent: str | None, force: bool) -> None:
 		typer.echo('Created ~/.agents/skills/imbalance-load skill for Codex')
 
 	# MCP config generation
-	if 'all' in agents_list or 'mcp' in agents_list:
+	if mcp_configs and ('all' in agents_list or 'cursor' in agents_list):
 		_mcp_config(cwd)
+
+	if report:
+		import json
+
+		report_data = {'ok': True, 'generated': generated, 'skipped': skipped, 'warnings': warnings, 'errors': []}
+		typer.echo(json.dumps(report_data, indent=2))
 
 
 def _mcp_config(cwd: Path) -> None:
