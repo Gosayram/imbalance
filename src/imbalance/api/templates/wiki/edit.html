@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ section.slug }} — imbalance{% endblock %}
+{% block content %}
+<h2>Edit: {{ section.slug }}</h2>
+<form action="/wiki/{{ section.slug }}" method="post"
+      hx-put="/wiki/{{ section.slug }}" hx-swap="none">
+    <input type="hidden" name="method" value="put">
+    <textarea name="content" rows="20" style="font-family: monospace;">{{ section.content }}</textarea>
+    <div>
+        <button type="submit">Save</button>
+        <a href="/wiki/{{ section.slug }}" role="button" class="secondary">Cancel</a>
+    </div>
+</form>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@6.65.7/dist/cm6.min.js"></script>
+{% endblock %}

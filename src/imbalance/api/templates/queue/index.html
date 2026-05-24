@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Queue — imbalance{% endblock %}
+{% block content %}
+<h2>Flush Queue</h2>
+{% if items %}
+<table>
+    <thead>
+        <tr><th>ID</th><th>Session</th><th>Attempts</th><th>Next Retry</th><th>Error</th></tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.id }}</td>
+            <td><code>{{ item.session_id[:8] }}…</code></td>
+            <td>{{ item.attempts }}</td>
+            <td>{{ item.next_retry or '—' }}</td>
+            <td class="muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.error or '—' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Queue is empty.</p>
+{% endif %}
+{% endblock %}

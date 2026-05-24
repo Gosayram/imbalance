@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}imbalance{% endblock %}
+{% block content %}
+<hgroup>
+    <h2>imbalance</h2>
+    <p>SQLite-first local knowledge base for coding agents</p>
+</hgroup>
+<div hx-get="/api/status" hx-trigger="load, every 30s">
+    <p class="muted">Loading status…</p>
+</div>
+<article>
+    <header><h3>Quick Links</h3></header>
+    <ul>
+        <li><a href="/wiki">Browse Wiki</a></li>
+        <li><a href="/sessions">View Sessions</a></li>
+        <li><a href="/queue">View Flush Queue</a></li>
+    </ul>
+</article>
+{% endblock %}

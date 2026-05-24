@@ -21,11 +21,15 @@ session_app = typer.Typer(help='Session checkpoint and recovery commands.')
 queue_app = typer.Typer(help='Durable flush queue commands.')
 daemon_app = typer.Typer(help='Daemon commands.')
 embeddings_app = typer.Typer(help='Embedding tier management.')
+kb_app = typer.Typer(help='Knowledge base compaction commands.')
+wiki_app = typer.Typer(help='Wiki section commands.')
 app.add_typer(project_app, name='project')
 app.add_typer(session_app, name='session')
 app.add_typer(queue_app, name='queue')
 app.add_typer(daemon_app, name='daemon')
 app.add_typer(embeddings_app, name='embeddings')
+app.add_typer(kb_app, name='kb')
+app.add_typer(wiki_app, name='wiki')
 
 
 @project_app.command('info')
@@ -202,6 +206,81 @@ def daemon_stop() -> None:
 	except PermissionError:
 		typer.echo(f'Permission denied to kill process {pid}')
 		raise typer.Exit(code=1) from None
+
+
+@daemon_app.command('install')
+def daemon_install() -> None:
+	"""Install daemon as system service (launchd on macOS, systemd on Linux)."""
+	import sys
+
+	if sys.platform == 'darwin':
+		_install_launchd()
+	elif sys.platform.startswith('linux'):
+		_install_systemd()
+	else:
+		typer.echo(f'Unsupported platform: {sys.platform}')
+		raise typer.Exit(code=1)
+
+
+def _install_launchd() -> None:
+	import shutil
+	from pathlib import Path
+
+	imbalance_bin = shutil.which('imbalance')
+	if not imbalance_bin:
+		typer.echo('imbalance binary not found in PATH')
+		raise typer.Exit(code=1)
+
+	plist = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>ai.imbalance.daemon</string>
+    <key>ProgramArguments</key><array>
+        <string>{imbalance_bin}</string><string>daemon</string><string>start</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/tmp/imbalance-daemon.log</string>
+    <key>StandardErrorPath</key><string>/tmp/imbalance-daemon.err</string>
+</dict>
+</plist>'''
+
+	plist_path = Path.home() / 'Library' / 'LaunchAgents' / 'ai.imbalance.daemon.plist'
+	plist_path.parent.mkdir(parents=True, exist_ok=True)
+	plist_path.write_text(plist)
+	typer.echo(f'Installed launchd plist: {plist_path}')
+	typer.echo('Run: launchctl load ' + str(plist_path))
+
+
+def _install_systemd() -> None:
+	import shutil
+	from pathlib import Path
+
+	imbalance_bin = shutil.which('imbalance')
+	if not imbalance_bin:
+		typer.echo('imbalance binary not found in PATH')
+		raise typer.Exit(code=1)
+
+	unit = f'''[Unit]
+Description=imbalance knowledge base daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={imbalance_bin} daemon start
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+'''
+
+	unit_path = Path.home() / '.config' / 'systemd' / 'user' / 'imbalance.service'
+	unit_path.parent.mkdir(parents=True, exist_ok=True)
+	unit_path.write_text(unit)
+	typer.echo(f'Installed systemd unit: {unit_path}')
+	typer.echo('Run: systemctl --user enable --now imbalance')
 
 
 async def _daemon_start(port: int) -> None:
@@ -491,6 +570,240 @@ async def _embeddings_set(provider: str, model: str | None) -> None:
 
 	if provider != 'none':
 		typer.echo('Run `imbalance embeddings reindex` to build vectors.')
+
+
+@kb_app.command('compact')
+def kb_compact(
+	dry_run: Annotated[bool, typer.Option('--dry-run')] = False,
+) -> None:
+	asyncio.run(_kb_compact(dry_run))
+
+
+async def _kb_compact(dry_run: bool) -> None:
+	from imbalance.core.compaction import KBCompactor
+	from imbalance.core.router import ModelRouter
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		router = ModelRouter()
+		compactor = KBCompactor(db=db, router=router, kb_name=project.name)
+		report = await compactor.run_full_compaction(dry_run=dry_run)
+		typer.echo(f'Compaction complete (dry_run={dry_run}):')
+		typer.echo(f'  updated: {len(report.updated)}')
+		typer.echo(f'  archived: {len(report.archived)}')
+		typer.echo(f'  evergreen: {len(report.evergreen)}')
+		typer.echo(f'  current: {len(report.current)}')
+	finally:
+		await db.close()
+
+
+@kb_app.command('status')
+def kb_status() -> None:
+	asyncio.run(_kb_status())
+
+
+async def _kb_status() -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT COUNT(*) as cnt FROM wiki_sections WHERE kb_name=? AND archived=FALSE',
+			(project.name,),
+		)
+		active = rows[0]['cnt'] if rows else 0
+		archived = await db.execute_fetchall(
+			'SELECT COUNT(*) as cnt FROM wiki_sections WHERE kb_name=? AND archived=TRUE',
+			(project.name,),
+		)
+		archived_cnt = archived[0]['cnt'] if archived else 0
+		last = await db.execute_fetchall(
+			'SELECT ran_at, sections_total, sections_archived, duration_sec '
+			'FROM kb_compaction_log WHERE kb_name=? ORDER BY ran_at DESC LIMIT 1',
+			(project.name,),
+		)
+		typer.echo(f'Active sections: {active}')
+		typer.echo(f'Archived: {archived_cnt}')
+		if last:
+			r = last[0]
+			typer.echo(f'Last compaction: {r["ran_at"]} ({r["sections_total"]} total, {r["sections_archived"]} archived, {r["duration_sec"]:.1f}s)')
+		else:
+			typer.echo('No compaction runs recorded')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('show')
+def wiki_show(
+	slug: Annotated[str, typer.Argument(help='Section slug')],
+	include_archived: Annotated[bool, typer.Option('--include-archived')] = False,
+) -> None:
+	asyncio.run(_wiki_show(slug, include_archived))
+
+
+async def _wiki_show(slug: str, include_archived: bool) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		extra = '' if include_archived else 'AND archived=FALSE'
+		rows = await db.execute_fetchall(
+			f'SELECT content, section, token_count, updated_at FROM wiki_sections '
+			f'WHERE kb_name=? AND slug=? {extra}',
+			(project.name, slug),
+		)
+		if not rows:
+			typer.echo(f'Section not found: {slug}')
+			raise typer.Exit(code=1)
+		r = rows[0]
+		typer.echo(f'[{r["section"]}] {slug} ({r["token_count"]} tokens, {r["updated_at"]})')
+		typer.echo(r['content'])
+	finally:
+		await db.close()
+
+
+@wiki_app.command('restore')
+def wiki_restore(
+	slug: Annotated[str, typer.Argument(help='Section slug to restore from archive')],
+) -> None:
+	asyncio.run(_wiki_restore(slug))
+
+
+async def _wiki_restore(slug: str) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		await db.execute(
+			"UPDATE wiki_sections SET archived=FALSE, archived_at=NULL, archive_reason=NULL "
+			"WHERE kb_name=? AND slug=? AND archived=TRUE",
+			(project.name, slug),
+		)
+		await db.commit()
+		typer.echo(f'Restored: {slug}')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('purge')
+def wiki_purge(
+	older_than_days: Annotated[int, typer.Option('--older-than', help='Purge archived older than N days')] = 90,
+) -> None:
+	asyncio.run(_wiki_purge(older_than_days))
+
+
+async def _wiki_purge(older_than_days: int) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			"SELECT slug FROM wiki_sections WHERE kb_name=? AND archived=TRUE "
+			"AND archived_at < datetime('now', ? || ' days')",
+			(project.name, f'-{older_than_days}'),
+		)
+		if not rows:
+			typer.echo('No archived sections to purge')
+			return
+		for r in rows:
+			await db.execute(
+				"DELETE FROM wiki_fts WHERE rowid IN (SELECT id FROM wiki_sections WHERE kb_name=? AND slug=?)",
+				(project.name, r['slug']),
+			)
+			await db.execute(
+				"DELETE FROM wiki_sections WHERE kb_name=? AND slug=?",
+				(project.name, r['slug']),
+			)
+		await db.commit()
+		typer.echo(f'Purged {len(rows)} archived sections')
+	finally:
+		await db.close()
+
+
+@app.command('backup')
+def backup(
+	path: Annotated[str, typer.Argument(help='Output path for backup DB')],
+) -> None:
+	asyncio.run(_backup(path))
+
+
+async def _backup(path: str) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		from pathlib import PurePosixPath
+
+		backup_path = str(PurePosixPath(path))
+		await db.execute(f"VACUUM INTO '{backup_path}'")
+		await db.commit()
+		typer.echo(f'Backup created: {backup_path}')
+	finally:
+		await db.close()
+
+
+@app.command('health')
+def health_cmd() -> None:
+	asyncio.run(_health_cmd())
+
+
+async def _health_cmd() -> None:
+	from imbalance.core.project import load_project
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		check = await integrity_check(db)
+		queue_count = await FlushQueue(db).count()
+
+		typer.echo(f'integrity: {check}')
+		typer.echo(f'pending_queue: {queue_count}')
+		typer.echo(f'kb: {project.name}')
+		typer.echo(f'db: {project.db_path}')
+	finally:
+		await db.close()
+
+
+@app.command('flush')
+def flush_standalone(
+	summary: Annotated[str, typer.Option('--summary', help='Session summary text')],
+	decision: Annotated[list[str] | None, typer.Option('--decision')] = None,
+	next_step: Annotated[list[str] | None, typer.Option('--next-step')] = None,
+	session_id: Annotated[str | None, typer.Option('--session-id')] = None,
+) -> None:
+	"""CI-mode flush: write summary to KB without daemon."""
+	asyncio.run(
+		_flush_ci(
+			summary=summary,
+			decisions=decision or [],
+			next_steps=next_step or [],
+			session_id=session_id,
+		)
+	)
+
+
+async def _flush_ci(
+	summary: str, decisions: list[str], next_steps: list[str], session_id: str | None
+) -> None:
+	import uuid
+
+	from imbalance.core.tokens import estimate_tokens
+	from imbalance.core.write import WriteEngine
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		sid = session_id or str(uuid.uuid4())
+		store = SQLiteStore(db, project.name)
+		engine = WriteEngine(store)
+		content = summary
+		if decisions:
+			content += '\n\nDecisions:\n' + '\n'.join('- ' + d for d in decisions)
+		if next_steps:
+			content += '\n\nNext steps:\n' + '\n'.join('- ' + s for s in next_steps)
+		token_count = estimate_tokens(content)
+		await engine.save_fact(
+			content=content, section='context', tags=['ci-flush'], session_id=sid
+		)
+		typer.echo(f'CI flush saved ({token_count} tokens, session {sid})')
+	finally:
+		await db.close()
 
 
 if __name__ == '__main__':

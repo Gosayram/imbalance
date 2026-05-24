@@ -1,0 +1,17 @@
+services:
+  imbalance:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "4731:4731"
+    volumes:
+      - imbalance-data:/data
+      - .:/workspace:ro
+    environment:
+      IMBALANCE_PROJECT_DIR: /workspace
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+volumes:
+  imbalance-data:
