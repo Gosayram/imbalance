@@ -1,3 +1,6 @@
+from pathlib import Path
+from unittest.mock import patch
+
 from typer.testing import CliRunner
 
 from imbalance.cli.app import app
@@ -11,8 +14,10 @@ def test_daemon_start_command_shows_help() -> None:
 	assert 'Daemon commands' in result.output
 
 
-def test_daemon_stop_no_pid_file() -> None:
-	result = runner.invoke(app, ['daemon', 'stop'])
+def test_daemon_stop_no_pid_file(tmp_path: Path) -> None:
+	fake_pid = tmp_path / 'daemon.pid'
+	with patch('imbalance.server.PID_FILE', fake_pid):
+		result = runner.invoke(app, ['daemon', 'stop'])
 	assert result.exit_code == 1
 	assert 'No daemon PID file found' in result.output
 

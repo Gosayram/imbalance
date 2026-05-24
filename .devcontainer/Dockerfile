@@ -30,6 +30,12 @@ RUN case "${TARGETARCH}" in \
 	&& install "/tmp/git-cliff-${GIT_CLIFF_VERSION}/git-cliff" /usr/local/bin/git-cliff \
 	&& rm -rf /tmp/git-cliff*
 
-ENV PATH="/root/.local/bin:$PATH"
+RUN groupadd -g 1000 app && useradd -m -u 1000 -g app app
 
+ENV PATH="/home/app/.local/bin:$PATH" \
+	HOME="/home/app"
+
+RUN mkdir -p /workspaces/imbalance && chown -R app:app /workspaces
+
+USER app
 WORKDIR /workspaces/imbalance

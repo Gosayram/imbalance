@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -56,7 +57,7 @@ class ImbalanceDaemon:
 		await self._process_flush_queue()
 
 		PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-		PID_FILE.write_text(str(asyncio.get_event_loop()._process_pid or 0))
+		PID_FILE.write_text(str(os.getpid()))
 
 	async def _process_flush_queue(self) -> None:
 		if not self.db:
@@ -73,9 +74,9 @@ class ImbalanceDaemon:
 					max_tokens=600,
 				)
 				await self._router.apply_delta(delta, self.db)
-				await queue.complete(item.id)
 				if self.session_manager:
 					await self.session_manager.mark_flushed(item.session_id)
+				await queue.complete(item.id)
 				logger.info(f'Processed queued flush for session {item.session_id}')
 			except Exception as e:
 				next_retry = await queue.mark_failed(item.id, item.attempts + 1, str(e))
@@ -100,8 +101,12 @@ class ImbalanceDaemon:
 				logger.warning('In-flight drain timed out')
 
 		if self.db:
-			await checkpoint(self.db, mode='FULL')
-			await self.db.close()
+			try:
+				await checkpoint(self.db, mode='FULL')
+			except Exception:
+				logger.exception('WAL checkpoint failed')
+			finally:
+				await self.db.close()
 
 		with contextlib.suppress(Exception):
 			PID_FILE.unlink(missing_ok=True)
@@ -124,7 +129,11 @@ class ImbalanceDaemon:
 async def run_daemon(port: int = 4731) -> None:
 	project = load_project()
 	daemon = ImbalanceDaemon(project)
-	await daemon.startup()
+	try:
+		await daemon.startup()
+	except Exception:
+		await daemon.shutdown()
+		raise
 
 	from uvicorn import Config, Server
 

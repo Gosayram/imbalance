@@ -472,9 +472,12 @@ async def _claude_code_setup() -> None:
 	config_path.write_text(json.dumps(settings, indent=2) + '\n')
 	typer.echo(f'Claude Code configured: {config_path}')
 	project = load_project()
-	await _open_project_db(project)
-	project.kb_dir.mkdir(parents=True, exist_ok=True)
-	(project.kb_dir / 'pending').mkdir(parents=True, exist_ok=True)
+	db = await _open_project_db(project)
+	try:
+		project.kb_dir.mkdir(parents=True, exist_ok=True)
+		(project.kb_dir / 'pending').mkdir(parents=True, exist_ok=True)
+	finally:
+		await db.close()
 	typer.echo('Ready for imbalance MCP')
 
 

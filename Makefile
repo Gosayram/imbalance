@@ -85,7 +85,7 @@ init-db: venv ## Initialize the current project's SQLite database
 
 coderabbit-review: venv ## Run CodeRabbit review and save report to .coderabbit-docs.md
 	@if command -v coderabbit >/dev/null 2>&1; then \
-		echo "$(YELLOW)Running CodeRabbit review...$(RESET)" && time coderabbit review > .coderabbit-docs.md 2>&1 || echo "$(RED)coderabbit failed$(RESET)"; \
+		echo "$(YELLOW)Running CodeRabbit review...$(RESET)" && time coderabbit review > .coderabbit-docs.md 2>&1; \
 	else \
-		echo "$(YELLOW)Running CodeRabbit via uv...$(RESET)" && time $(PYTHON) -m coderabbit review > .coderabbit-docs.md 2>&1 || echo "$(RED)coderabbit not installed or failed$(RESET)"; \
+		echo "$(YELLOW)Running CodeRabbit via uv...$(RESET)" && time $(PYTHON) -m coderabbit review > .coderabbit-docs.md 2>&1; \
 	fi

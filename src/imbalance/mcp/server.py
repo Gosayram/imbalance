@@ -231,7 +231,7 @@ async def _list_topics(db: Any, kb_name: str) -> list[types.TextContent]:
 async def _resume_session(
 	db: Any, project: Project, arguments: dict[str, Any]
 ) -> list[types.TextContent]:
-	from imbalance.core.session import SessionManager
+	from imbalance.core.session import SessionManager, SessionStatus
 
 	session_id = arguments.get('session_id')
 	if not session_id:
@@ -242,12 +242,12 @@ async def _resume_session(
 	if session is None:
 		raise ValueError(f'Unknown session: {session_id}')
 
-	if session.status == 'active':
+	if session.status == SessionStatus.ACTIVE:
 		return [types.TextContent(type='text', text=f'Session {session_id} already active')]
 
 	await db.execute(
-		"UPDATE sessions SET status='active' WHERE id=?",
-		(session_id,),
+		"UPDATE sessions SET status=? WHERE id=?",
+		(SessionStatus.ACTIVE.value, session_id),
 	)
 	await db.commit()
 	return [types.TextContent(type='text', text=f'Resumed session {session_id}')]
