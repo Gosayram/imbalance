@@ -155,6 +155,60 @@ class SQLiteStore:
 		cursor = await self.db.execute(sql, params)
 		return await cursor.fetchone()
 
+	async def vec_search(
+		self,
+		embedding: list[float],
+		*,
+		limit: int = 8,
+		scope: list[str] | None = None,
+	) -> list[ContextChunk]:
+		from imbalance.storage.vec import search_by_embedding
+
+		vec_results = await search_by_embedding(self.db, embedding, limit=limit * 2)
+		if not vec_results:
+			return []
+
+		ids = [r['section_id'] for r in vec_results]
+		distance_map = {r['section_id']: r['distance'] for r in vec_results}
+
+		placeholders = ', '.join('?' for _ in ids)
+		params: list[object] = [self.kb_name]
+		params.extend(ids)
+		scope_sql = ''
+		if scope:
+			ph = ', '.join('?' for _ in scope)
+			scope_sql = f'AND ws.section IN ({ph})'
+			params.extend(scope)
+
+		rows = await self.db.execute_fetchall(
+			f"""
+			SELECT ws.id, ws.slug, ws.section, ws.content, ws.token_count,
+				ws.confirmation_count
+			FROM wiki_sections ws
+			WHERE ws.kb_name = ?
+				AND ws.id IN ({placeholders})
+				AND ws.archived = FALSE
+				{scope_sql}
+			""",
+			params,
+		)
+
+		results = []
+		for row in rows:
+			rid = int(row['id'])
+			dist = distance_map.get(rid, 1.0)
+			results.append(
+				ContextChunk(
+					slug=row['slug'],
+					section=row['section'],
+					content=row['content'],
+					score=1.0 - min(dist, 1.0),
+					token_count=int(row['token_count']),
+					confidence=min(float(row['confirmation_count']) / 10.0, 1.0),
+				)
+			)
+		return results
+
 
 def _truncate_words(content: str, approx_tokens: int) -> str:
 	words = content.split()

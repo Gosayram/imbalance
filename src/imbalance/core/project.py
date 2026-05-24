@@ -17,6 +17,7 @@ class ProjectConfig:
 	store: str | None = None
 	store_path: Path | None = None
 	budget_tokens: int = 2000
+	cache_ttl_sec: int = 1800
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class Project:
 			store=kb.get('store'),
 			store_path=Path(store_path).expanduser() if store_path else None,
 			budget_tokens=int(retrieval.get('budget_tokens', 2000)),
+			cache_ttl_sec=int(retrieval.get('cache_ttl_sec', 1800)),
 		)
 		return cls(
 			root=path.parent,

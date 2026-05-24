@@ -88,6 +88,34 @@ async def handle_list_tools() -> list[types.Tool]:
 				'required': ['session_id'],
 			},
 		),
+		types.Tool(
+			name='report_context_usage',
+			description='Report context window usage and get budget action recommendation',
+			inputSchema={
+				'type': 'object',
+				'properties': {
+					'used_tokens': {'type': 'integer', 'description': 'Tokens currently used'},
+					'total_tokens': {'type': 'integer', 'description': 'Total context window size'},
+					'session_id': {'type': 'string'},
+				},
+				'required': ['used_tokens', 'total_tokens'],
+			},
+		),
+		types.Tool(
+			name='save_compaction_summary',
+			description='Save session state BEFORE compaction so it can be restored after',
+			inputSchema={
+				'type': 'object',
+				'properties': {
+					'session_id': {'type': 'string'},
+					'summary': {'type': 'string', 'description': 'Current session summary'},
+					'decisions': {'type': 'array', 'items': {'type': 'string'}},
+					'findings': {'type': 'array', 'items': {'type': 'string'}},
+					'next_steps': {'type': 'array', 'items': {'type': 'string'}},
+				},
+				'required': ['session_id', 'summary'],
+			},
+		),
 	]
 
 
@@ -116,6 +144,10 @@ async def handle_call_tool(
 			return await _list_topics(db, project.name)
 		if name == 'resume_session':
 			return await _resume_session(db, project, arguments)
+		if name == 'report_context_usage':
+			return await _report_context_usage(arguments)
+		if name == 'save_compaction_summary':
+			return await _save_compaction_summary(db, project, arguments)
 		raise ValueError(f'Unknown tool: {name}')
 	finally:
 		await db.close()
@@ -125,11 +157,13 @@ async def _get_context(store: SQLiteStore, args: dict[str, Any]) -> list[types.T
 	query = args.get('query', '')
 	budget = args.get('budget_tokens', 2000)
 	scope = args.get('scope')
+	session_id = args.get('session_id')
 
 	pack = await QueryEngine(store).get_context_pack(
 		query=query,
 		budget_tokens=budget,
 		scope=scope,
+		session_id=session_id,
 	)
 	return [types.TextContent(type='text', text=pack.render_markdown())]
 
@@ -217,6 +251,69 @@ async def _resume_session(
 	)
 	await db.commit()
 	return [types.TextContent(type='text', text=f'Resumed session {session_id}')]
+
+
+async def _report_context_usage(arguments: dict[str, Any]) -> list[types.TextContent]:
+	from imbalance.core.budget import SessionBudgetMonitor
+
+	monitor = SessionBudgetMonitor()
+	action = monitor.check(
+		used_tokens=arguments.get('used_tokens', 0),
+		total_tokens=arguments.get('total_tokens', 1),
+	)
+	return [types.TextContent(type='text', text=action.message if action.message else action.action)]
+
+
+async def _save_compaction_summary(
+	db: Any, project: Project, arguments: dict[str, Any]
+) -> list[types.TextContent]:
+	session_id = arguments.get('session_id')
+	if not session_id:
+		raise ValueError('session_id required')
+
+	summary = arguments.get('summary', '')
+	decisions = arguments.get('decisions', [])
+	findings = arguments.get('findings', [])
+	next_steps = arguments.get('next_steps', [])
+
+	parts = [summary]
+	if decisions:
+		parts.append('Decisions:\n' + '\n'.join('- ' + d for d in decisions))
+	if findings:
+		parts.append('Findings:\n' + '\n'.join('- ' + f for f in findings))
+	if next_steps:
+		parts.append('Next steps:\n' + '\n'.join('- ' + s for s in next_steps))
+	content = '\n\n'.join(parts)
+
+	slug = 'context/compaction-' + session_id[:8]
+	await db.execute(
+		"""INSERT INTO wiki_sections
+			(kb_name, section, slug, content, token_count, session_id, compaction_point)
+		VALUES (?, 'context', ?, ?, ?, ?, TRUE)
+		ON CONFLICT(kb_name, slug) DO UPDATE SET
+			content = excluded.content,
+			token_count = excluded.token_count,
+			session_id = excluded.session_id,
+			updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+			compaction_point = TRUE""",
+		(project.name, slug, content, len(content.split()), session_id),
+	)
+	await db.execute(
+		"UPDATE sessions SET compacted_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
+		(session_id,),
+	)
+	await db.commit()
+
+	return [
+		types.TextContent(
+			type='text',
+			text=(
+				'Compaction summary saved to KB. '
+				'After compaction completes, call get_context("current session state") '
+				'to restore context into the new window.'
+			),
+		)
+	]
 
 
 async def main() -> None:

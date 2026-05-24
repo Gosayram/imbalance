@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from imbalance.core.context import ContextMode, ContextPack
+import hashlib
+from typing import Any
+
+from cachetools import TTLCache
+
+from imbalance.core.context import ContextChunk, ContextMode, ContextPack
 from imbalance.storage.store import SQLiteStore
 
 PRECEDENCE = [
@@ -12,13 +17,72 @@ PRECEDENCE = [
 	'archived',
 ]
 
+COMPACTED_PRECEDENCE = [
+	'compaction_checkpoint',
+	'current_task',
+	'memory_summary',
+	'wiki_sections',
+]
+
+DEFAULT_SCOPE_WEIGHTS: dict[str, float] = {
+	'decisions': 1.5,
+	'context': 1.3,
+	'stack': 1.0,
+	'issues': 1.0,
+	'about': 1.0,
+}
+
+RRF_K = 60
+
+
+def _cache_key(query: str, budget_tokens: int, scope: tuple[str, ...] | None) -> str:
+	parts = [query, str(budget_tokens)]
+	if scope:
+		parts.extend(sorted(scope))
+	return hashlib.sha256('|'.join(parts).encode()).hexdigest()[:16]
+
+
+def rrf_merge(
+	fts_results: list[ContextChunk],
+	vec_results: list[ContextChunk],
+	scope_weights: dict[str, float] | None = None,
+) -> list[ContextChunk]:
+	weights = scope_weights or DEFAULT_SCOPE_WEIGHTS
+	scores: dict[str, float] = {}
+	chunks: dict[str, ContextChunk] = {}
+
+	for rank, chunk in enumerate(fts_results):
+		slug = chunk.slug
+		section_weight = weights.get(chunk.section, 1.0)
+		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1)
+		chunks[slug] = chunk
+
+	for rank, chunk in enumerate(vec_results):
+		slug = chunk.slug
+		section_weight = weights.get(chunk.section, 1.0)
+		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1)
+		if slug not in chunks:
+			chunks[slug] = chunk
+
+	ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+	return [chunks[slug] for slug, _ in ranked]
+
 
 class QueryEngine:
 	def __init__(
-		self, store: SQLiteStore, memory_mode: ContextMode = ContextMode.READ_WRITE
+		self,
+		store: SQLiteStore,
+		memory_mode: ContextMode = ContextMode.READ_WRITE,
+		cache_ttl: int = 1800,
+		cache_maxsize: int = 256,
+		embedding_provider: Any | None = None,
+		scope_weights: dict[str, float] | None = None,
 	) -> None:
 		self.store = store
 		self.memory_mode = memory_mode
+		self._cache: TTLCache[str, ContextPack] = TTLCache(maxsize=cache_maxsize, ttl=cache_ttl)
+		self._embedder = embedding_provider
+		self._scope_weights = scope_weights
 
 	async def get_context_pack(
 		self,
@@ -26,6 +90,31 @@ class QueryEngine:
 		*,
 		budget_tokens: int = 2000,
 		scope: list[str] | None = None,
+		session_id: str | None = None,
+	) -> ContextPack:
+		compaction_chunk = None
+		if session_id:
+			compaction_chunk = await self._get_compaction_checkpoint(session_id)
+
+		if compaction_chunk:
+			return await self._post_compaction_restore(
+				query, budget_tokens, scope, compaction_chunk
+			)
+
+		key = _cache_key(query, budget_tokens, tuple(scope) if scope else None)
+		cached = self._cache.get(key)
+		if cached is not None:
+			return cached
+
+		result = await self._standard_search(query, budget_tokens, scope)
+		self._cache[key] = result
+		return result
+
+	async def _standard_search(
+		self,
+		query: str,
+		budget_tokens: int,
+		scope: list[str] | None,
 	) -> ContextPack:
 		summary = None
 		summary_budget = min(500, int(budget_tokens * 0.2))
@@ -36,7 +125,8 @@ class QueryEngine:
 			if summary:
 				evidence_budget -= summary_budget
 
-		evidence = await self.store.fts_search(query, limit=8, scope=scope)
+		evidence = await self._hybrid_search(query, scope)
+
 		selected = []
 		used = 0
 		omitted = []
@@ -59,4 +149,74 @@ class QueryEngine:
 			evidence=selected,
 			omitted=omitted,
 			warnings=warnings,
+		)
+
+	async def _hybrid_search(
+		self, query: str, scope: list[str] | None
+	) -> list[ContextChunk]:
+		fts_results = await self.store.fts_search(query, limit=8, scope=scope)
+
+		if self._embedder is None:
+			return fts_results
+
+		try:
+			embeddings = await self._embedder.embed([query])
+			vec_results = await self.store.vec_search(
+				embeddings[0], limit=8, scope=scope
+			)
+			return rrf_merge(fts_results, vec_results, self._scope_weights)
+		except Exception:
+			return fts_results
+
+	async def _post_compaction_restore(
+		self,
+		query: str,
+		budget_tokens: int,
+		scope: list[str] | None,
+		compaction_chunk: ContextChunk,
+	) -> ContextPack:
+		compaction_budget = int(budget_tokens * 0.4)
+		regular_budget = budget_tokens - compaction_budget
+
+		summary = await self.store.get_memory_summary(max_tokens=min(300, int(regular_budget * 0.2)))
+
+		evidence = await self.store.fts_search(query, limit=6, scope=scope)
+		selected: list[ContextChunk] = [compaction_chunk]
+		used = compaction_chunk.token_count
+		omitted = []
+		for chunk in evidence:
+			if used + chunk.token_count > regular_budget:
+				omitted.append(chunk.slug)
+				continue
+			selected.append(chunk)
+			used += chunk.token_count
+
+		return ContextPack(
+			query=query,
+			budget_tokens=budget_tokens,
+			precedence=COMPACTED_PRECEDENCE,
+			summary=summary,
+			evidence=selected,
+			omitted=omitted,
+			warnings=['Restored from compaction checkpoint.'],
+		)
+
+	async def _get_compaction_checkpoint(self, session_id: str) -> ContextChunk | None:
+		row = await self.store.db.execute_fetchall(
+			"""SELECT slug, section, content, token_count
+			FROM wiki_sections
+			WHERE kb_name=? AND compaction_point=TRUE AND session_id=?
+			ORDER BY updated_at DESC LIMIT 1""",
+			(self.store.kb_name, session_id),
+		)
+		if not row:
+			return None
+		r = row[0]
+		return ContextChunk(
+			slug=r['slug'],
+			section=r['section'],
+			content=r['content'],
+			score=1.0,
+			token_count=r['token_count'],
+			confidence=1.0,
 		)

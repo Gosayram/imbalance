@@ -20,10 +20,12 @@ project_app = typer.Typer(help='Project commands.')
 session_app = typer.Typer(help='Session checkpoint and recovery commands.')
 queue_app = typer.Typer(help='Durable flush queue commands.')
 daemon_app = typer.Typer(help='Daemon commands.')
+embeddings_app = typer.Typer(help='Embedding tier management.')
 app.add_typer(project_app, name='project')
 app.add_typer(session_app, name='session')
 app.add_typer(queue_app, name='queue')
 app.add_typer(daemon_app, name='daemon')
+app.add_typer(embeddings_app, name='embeddings')
 
 
 @project_app.command('info')
@@ -405,6 +407,90 @@ async def _open_project_db(project: Project):
 
 def _session_manager(db, project: Project) -> SessionManager:
 	return SessionManager(db=db, kb_name=project.name, pending_dir=project.kb_dir / 'pending')
+
+
+@embeddings_app.command('status')
+def embeddings_status() -> None:
+	asyncio.run(_embeddings_status())
+
+
+async def _embeddings_status() -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		from imbalance.storage.vec import is_vec_available
+
+		vec_ok = await is_vec_available(db)
+		rows = await db.execute_fetchall(
+			'SELECT COUNT(*) as cnt FROM wiki_sections WHERE kb_name=? AND archived=FALSE',
+			(project.name,),
+		)
+		wiki_count = rows[0]['cnt'] if rows else 0
+
+		vec_rows = await db.execute_fetchall('SELECT COUNT(*) as cnt FROM wiki_vec')
+		vec_count = vec_rows[0]['cnt'] if vec_rows else 0
+
+		if vec_ok and vec_count > 0:
+			typer.echo('tier: 1/2 (sqlite-vec enabled)')
+			typer.echo(f'vectors indexed: {vec_count}')
+		else:
+			typer.echo('tier: 0 (FTS5-only)')
+		typer.echo(f'wiki sections: {wiki_count}')
+		typer.echo(f'sqlite-vec available: {vec_ok}')
+	finally:
+		await db.close()
+
+
+@embeddings_app.command('set')
+def embeddings_set(
+	provider: Annotated[str, typer.Argument(help='ollama|openai|openrouter|none')],
+	model: Annotated[str | None, typer.Option('--model')] = None,
+) -> None:
+	asyncio.run(_embeddings_set(provider, model))
+
+
+async def _embeddings_set(provider: str, model: str | None) -> None:
+	import tomllib
+
+	project = load_project()
+	config_path = project.config_path
+	raw = tomllib.loads(config_path.read_text(encoding='utf-8'))
+
+	if provider == 'none':
+		raw.pop('embeddings', None)
+	elif provider == 'ollama':
+		raw['embeddings'] = {
+			'provider': 'ollama',
+			'model': model or 'nomic-embed-text:v1.5',
+		}
+	elif provider in ('openai', 'openrouter'):
+		raw['embeddings'] = {
+			'provider': provider,
+			'model': model or 'text-embedding-3-small',
+		}
+	else:
+		raise typer.BadParameter(f'Unknown provider: {provider}')
+
+	import re
+
+	content = config_path.read_text(encoding='utf-8')
+	if 'embeddings' in raw:
+		emb = raw['embeddings']
+		block = '[embeddings]\n'
+		for k, v in emb.items():
+			block += f'{k} = "{v}"\n'
+		if '[embeddings]' in content:
+			content = re.sub(r'\[embeddings\].*?(?=\n\[|\Z)', block.strip(), content, flags=re.DOTALL)
+		else:
+			content = content.rstrip() + '\n\n' + block
+	else:
+		content = re.sub(r'\[embeddings\].*?(?=\n\[|\Z)', '', content, flags=re.DOTALL)
+
+	config_path.write_text(content.strip() + '\n', encoding='utf-8')
+	typer.echo(f'Embedding provider set to: {provider}')
+
+	if provider != 'none':
+		typer.echo('Run `imbalance embeddings reindex` to build vectors.')
 
 
 if __name__ == '__main__':
