@@ -43,6 +43,7 @@ class CircuitBreaker:
 		self.failures = 0
 		self.successes = 0
 		self.opened_at: float | None = None
+		self._probe_in_progress = False
 
 	async def call(self, operation: Callable[[], Awaitable[T]]) -> T:
 		await self._before_call()
@@ -56,6 +57,8 @@ class CircuitBreaker:
 
 	async def _before_call(self) -> None:
 		async with self._lock:
+			if self.state == CircuitState.HALF_OPEN and self._probe_in_progress:
+				raise CircuitOpenError(f'{self.name} circuit is half-open (probe in progress)')
 			if self.state != CircuitState.OPEN:
 				return
 			if self.opened_at is None:
@@ -64,9 +67,11 @@ class CircuitBreaker:
 				raise CircuitOpenError(f'{self.name} circuit is open')
 			self.state = CircuitState.HALF_OPEN
 			self.successes = 0
+			self._probe_in_progress = True
 
 	async def _on_success(self) -> None:
 		async with self._lock:
+			self._probe_in_progress = False
 			self.failures = 0
 			if self.state != CircuitState.HALF_OPEN:
 				return
@@ -77,6 +82,7 @@ class CircuitBreaker:
 
 	async def _on_failure(self) -> None:
 		async with self._lock:
+			self._probe_in_progress = False
 			self.successes = 0
 			self.failures += 1
 			if self.state == CircuitState.HALF_OPEN or self.failures >= self.failure_threshold:

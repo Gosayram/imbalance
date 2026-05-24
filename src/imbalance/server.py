@@ -57,7 +57,7 @@ class ImbalanceDaemon:
 		await self._process_flush_queue()
 
 		PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-		PID_FILE.write_text(str(os.getpid()))
+		PID_FILE.write_text(str(os.getpid()), encoding='utf-8')
 
 	async def _process_flush_queue(self) -> None:
 		if not self.db:
@@ -76,7 +76,8 @@ class ImbalanceDaemon:
 				await self._router.apply_delta(delta, self.db)
 				if self.session_manager:
 					await self.session_manager.mark_flushed(item.session_id)
-				await queue.complete(item.id)
+				else:
+					await queue.complete(item.id)
 				logger.info(f'Processed queued flush for session {item.session_id}')
 			except Exception as e:
 				next_retry = await queue.mark_failed(item.id, item.attempts + 1, str(e))
