@@ -580,7 +580,7 @@ requires-dist = [
     { name = "cachetools", specifier = ">=7.1,<8" },
     { name = "fastapi", specifier = ">=0.136.3,<0.137" },
     { name = "gitpython", marker = "extra == 'git'", specifier = ">=3.1.50,<4" },
-    { name = "imbalance", extras = ["ollama", "compress", "ui", "git"], marker = "extra == 'all'" },
+    { name = "imbalance", extras = ["ollama", "openai", "compress", "ui", "git"], marker = "extra == 'all'" },
     { name = "jinja2", marker = "extra == 'ui'", specifier = ">=3.1.6,<4" },
     { name = "llmlingua", marker = "extra == 'compress'", specifier = ">=0.2.2,<0.3" },
     { name = "mcp", specifier = ">=1.27.1,<2" },

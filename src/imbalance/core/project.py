@@ -11,6 +11,12 @@ CONFIG_FILE = 'imbalance.toml'
 
 
 @dataclass(frozen=True)
+class InheritConfig:
+	kb_name: str
+	weight: float = 0.5
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
 	name: str
 	version: str
@@ -18,6 +24,12 @@ class ProjectConfig:
 	store_path: Path | None = None
 	budget_tokens: int = 2000
 	cache_ttl_sec: int = 1800
+	dedup_threshold: float = 0.92
+	max_graph_hops: int = 1
+	max_related: int = 5
+	confidence_weight: float = 0.05
+	conflict_mode: str = 'warn'
+	inherit: InheritConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -48,10 +60,19 @@ class Project:
 		project = raw.get('project', {})
 		kb = raw.get('kb', {})
 		retrieval = raw.get('retrieval', {})
+		quality = retrieval.get('quality', {})
+		kb_inherit = kb.get('inherit', {})
 
 		name = project.get('name')
 		if not name:
 			raise ValueError(f'{path} must define [project].name')
+
+		inherit = None
+		if kb_inherit and 'from' in kb_inherit:
+			inherit = InheritConfig(
+				kb_name=str(kb_inherit['from']),
+				weight=float(kb_inherit.get('weight', 0.5)),
+			)
 
 		store_path = os.getenv('IMBALANCE_KB_PATH') or kb.get('store_path')
 		config = ProjectConfig(
@@ -61,6 +82,12 @@ class Project:
 			store_path=Path(store_path).expanduser() if store_path else None,
 			budget_tokens=int(retrieval.get('budget_tokens', 2000)),
 			cache_ttl_sec=int(retrieval.get('cache_ttl_sec', 1800)),
+			dedup_threshold=float(quality.get('dedup_threshold', 0.92)),
+			max_graph_hops=int(quality.get('max_graph_hops', 1)),
+			max_related=int(quality.get('max_related', 5)),
+			confidence_weight=float(quality.get('confidence_weight', 0.05)),
+			conflict_mode=str(quality.get('conflict_mode', 'warn')),
+			inherit=inherit,
 		)
 		return cls(
 			root=path.parent,

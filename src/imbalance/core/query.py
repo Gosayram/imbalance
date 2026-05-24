@@ -46,6 +46,7 @@ def rrf_merge(
 	fts_results: list[ContextChunk],
 	vec_results: list[ContextChunk],
 	scope_weights: dict[str, float] | None = None,
+	confidence_weight: float = 0.05,
 ) -> list[ContextChunk]:
 	weights = scope_weights or DEFAULT_SCOPE_WEIGHTS
 	scores: dict[str, float] = {}
@@ -54,13 +55,15 @@ def rrf_merge(
 	for rank, chunk in enumerate(fts_results):
 		slug = chunk.slug
 		section_weight = weights.get(chunk.section, 1.0)
-		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1)
+		confidence_boost = confidence_weight * chunk.confidence
+		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1) + confidence_boost
 		chunks[slug] = chunk
 
 	for rank, chunk in enumerate(vec_results):
 		slug = chunk.slug
 		section_weight = weights.get(chunk.section, 1.0)
-		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1)
+		confidence_boost = confidence_weight * chunk.confidence
+		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1) + confidence_boost
 		if slug not in chunks:
 			chunks[slug] = chunk
 
@@ -77,12 +80,14 @@ class QueryEngine:
 		cache_maxsize: int = 256,
 		embedding_provider: Any | None = None,
 		scope_weights: dict[str, float] | None = None,
+		confidence_weight: float = 0.05,
 	) -> None:
 		self.store = store
 		self.memory_mode = memory_mode
 		self._cache: TTLCache[str, ContextPack] = TTLCache(maxsize=cache_maxsize, ttl=cache_ttl)
 		self._embedder = embedding_provider
 		self._scope_weights = scope_weights
+		self._confidence_weight = confidence_weight
 
 	async def get_context_pack(
 		self,
@@ -147,6 +152,9 @@ class QueryEngine:
 		warnings = []
 		if self.memory_mode == ContextMode.READ_ONLY:
 			warnings.append('Memory is read-only for this run.')
+		unconfirmed = [c.slug for c in selected if c.confidence < 0.2]
+		if unconfirmed:
+			warnings.append(f'[unconfirmed] {", ".join(unconfirmed)}')
 
 		return ContextPack(
 			query=query,
@@ -171,7 +179,7 @@ class QueryEngine:
 			vec_results = await self.store.vec_search(
 				embeddings[0], limit=8, scope=scope
 			)
-			return rrf_merge(fts_results, vec_results, self._scope_weights)
+			return rrf_merge(fts_results, vec_results, self._scope_weights, self._confidence_weight)
 		except Exception:
 			return fts_results
 

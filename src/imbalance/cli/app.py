@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import signal
 from pathlib import Path
 from typing import Annotated
@@ -30,6 +31,10 @@ app.add_typer(daemon_app, name='daemon')
 app.add_typer(embeddings_app, name='embeddings')
 app.add_typer(kb_app, name='kb')
 app.add_typer(wiki_app, name='wiki')
+
+
+def _get_openrouter_key() -> str | None:
+	return os.environ.get('OPENROUTER_API_KEY')
 
 
 @project_app.command('info')
@@ -439,9 +444,14 @@ async def _queue_retry(session_id: str | None) -> None:
 
 
 @app.command('claude-code')
-def claude_code_setup() -> None:
+def claude_code_setup(
+	template: Annotated[
+		str | None,
+		typer.Option('--template', help='python-backend|frontend-react|devops|data-science'),
+	] = None,
+) -> None:
 	"""Auto-configure Claude Code settings.json for imbalance MCP."""
-	asyncio.run(_claude_code_setup())
+	asyncio.run(_claude_code_setup(template))
 
 
 @app.command('mcp')
@@ -452,7 +462,7 @@ def mcp() -> None:
 	asyncio.run(main())
 
 
-async def _claude_code_setup() -> None:
+async def _claude_code_setup(template: str | None) -> None:
 	import json
 	from pathlib import Path
 
@@ -478,6 +488,15 @@ async def _claude_code_setup() -> None:
 		(project.kb_dir / 'pending').mkdir(parents=True, exist_ok=True)
 	finally:
 		await db.close()
+
+	if template:
+		from imbalance.core.templates import generate_claude_md
+
+		content = generate_claude_md(template, project_name=project.name)
+		claude_path = Path.cwd() / 'CLAUDE.md'
+		claude_path.write_text(content, encoding='utf-8')
+		typer.echo(f'Generated CLAUDE.md from template: {template}')
+
 	typer.echo('Ready for imbalance MCP')
 
 
@@ -1008,6 +1027,95 @@ async def _import_kb(path: str, merge: bool) -> None:
 				token_count=s.get('token_count', len(s['content'].split())),
 			)
 		typer.echo(f'Imported {len(sections)} sections (merge={merge})')
+	finally:
+		await db.close()
+
+
+@app.command('consolidate')
+def consolidate_memories() -> None:
+	"""Consolidate raw memories into project summary via LLM."""
+	asyncio.run(_consolidate_memories())
+
+
+async def _consolidate_memories() -> None:
+	from imbalance.core.consolidation import consolidate_raw_memories
+	from imbalance.core.router import ModelRouter
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		store = SQLiteStore(db, project.name)
+		router = ModelRouter(openrouter_key=_get_openrouter_key())
+		result = await consolidate_raw_memories(store, router)
+		if result.updated:
+			typer.echo(
+				f'Consolidated {result.memories_consumed} memories '
+				f'({len(result.summary.split()) if result.summary else 0} tokens)'
+			)
+		else:
+			typer.echo('No unconsumed raw memories to consolidate')
+	finally:
+		await db.close()
+
+
+@app.command('scan')
+def scan_code(
+	directory: Annotated[str, typer.Argument(help='Directory to scan')] = '.',
+	extract: Annotated[
+		str | None, typer.Option('--extract', help='Filter: decisions|patterns|issues|notes')
+	] = None,
+) -> None:
+	"""Scan codebase for IMBALANCE: markers and import into KB."""
+	from imbalance.core.scanner import scan_directory
+
+	root = Path(directory).resolve()
+	hits = scan_directory(root)
+	if extract:
+		hits = [h for h in hits if h.section == extract]
+	if not hits:
+		typer.echo('No IMBALANCE markers found')
+		return
+	for hit in hits:
+		typer.echo(f'{hit.file.relative_to(root)}:{hit.line} [{hit.marker_type}] {hit.content}')
+	typer.echo(f'\n{len(hits)} markers found')
+
+
+@app.command('notify')
+def notify_test() -> None:
+	"""Test system notifications."""
+	from imbalance.core.notifications import send_system_notification
+
+	ok = send_system_notification('imbalance', 'Notifications are working!')
+	typer.echo(f'Notification sent: {ok}')
+
+
+@app.command('eval')
+def eval_retrieval(
+	query: Annotated[str, typer.Argument(help='Test query')],
+	expected: Annotated[
+		str | None, typer.Option('--expected', help='Comma-separated expected slugs')
+	] = None,
+	scope: Annotated[str | None, typer.Option('--scope')] = None,
+) -> None:
+	"""Evaluate retrieval quality for a query."""
+	asyncio.run(_eval_retrieval(query, expected, scope))
+
+
+async def _eval_retrieval(
+	query: str, expected: str | None, scope: str | None
+) -> None:
+	from imbalance.core.eval import EvalQuery, run_eval
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		store = SQLiteStore(db, project.name)
+		engine = QueryEngine(store, cache_ttl=0, confidence_weight=project.config.confidence_weight)
+		expected_slugs = [s.strip() for s in expected.split(',')] if expected else []
+		scope_list = [s.strip() for s in scope.split(',')] if scope else None
+		eq = EvalQuery(query=query, expected_slugs=expected_slugs, scope=scope_list)
+		report = await run_eval([eq], engine)
+		typer.echo(report.format_summary())
 	finally:
 		await db.close()
 

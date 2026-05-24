@@ -43,6 +43,7 @@ class SQLiteStore:
 					session_id=excluded.session_id,
 					machine_id=excluded.machine_id,
 					confirmation_count=confirmation_count+1,
+					last_confirmed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
 					updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
 				""",
 				(self.kb_name, section, slug, content, token_count, session_id, machine_id),
@@ -160,6 +161,49 @@ class SQLiteStore:
 		except Exception:
 			await self.db.rollback()
 			raise
+
+	async def fetch_unconsumed_raw_memories(
+		self, limit: int = 128
+	) -> list[aiosqlite.Row]:
+		rows = await self.db.execute_fetchall(
+			"""
+			SELECT id, memory_type, content, confidence, session_id
+			FROM raw_memories
+			WHERE kb_name=? AND consumed=FALSE
+			ORDER BY created_at ASC
+			LIMIT ?
+			""",
+			(self.kb_name, limit),
+		)
+		return rows
+
+	async def mark_raw_memories_consumed(self, ids: list[int]) -> None:
+		if not ids:
+			return
+		placeholders = ', '.join('?' for _ in ids)
+		await self.db.execute(
+			f'UPDATE raw_memories SET consumed=TRUE WHERE id IN ({placeholders})',
+			tuple(ids),
+		)
+		await self.db.commit()
+
+	async def insert_raw_memory(
+		self,
+		*,
+		session_id: str,
+		memory_type: str,
+		content: str,
+		confidence: float = 0.5,
+	) -> int:
+		cursor = await self.db.execute(
+			"""
+			INSERT INTO raw_memories(kb_name, session_id, memory_type, content, confidence)
+			VALUES (?, ?, ?, ?, ?)
+			""",
+			(self.kb_name, session_id, memory_type, content, confidence),
+		)
+		await self.db.commit()
+		return cursor.lastrowid
 
 	async def _fetchone(self, sql: str, params: tuple[object, ...]) -> aiosqlite.Row | None:
 		cursor = await self.db.execute(sql, params)

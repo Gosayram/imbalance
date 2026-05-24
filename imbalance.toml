@@ -7,6 +7,14 @@ store = "imbalance"
 
 [retrieval]
 budget_tokens = 2000
+cache_ttl_sec = 1800
+
+[retrieval.quality]
+dedup_threshold = 0.92
+max_graph_hops = 1
+max_related = 5
+confidence_weight = 0.05
+conflict_mode = "warn"
 
 [memory]
 mode = "read_write"
@@ -14,7 +22,17 @@ live_update = true
 max_summary_tokens = 500
 max_raw_memories_for_consolidation = 128
 
+[flush]
+ollama_base_url = "http://localhost:11434"
+ollama_model = "qwen3:8b"
+
 [security]
 redact_secrets = true
 redact_pii = true
 log_prompt_bodies = false
+
+[notifications]
+system = true
+queue_size_threshold = 5
+kb_stale_days = 14
+circuit_breaker_open = true

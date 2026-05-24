@@ -6,7 +6,7 @@ from imbalance.core.router import AllProvidersUnavailable, ModelRouter
 @pytest.mark.asyncio
 async def test_router_rejects_without_api_key() -> None:
 	router = ModelRouter(openrouter_key=None)
-	with pytest.raises(AllProvidersUnavailable, match='No OpenRouter API key'):
+	with pytest.raises(AllProvidersUnavailable, match='All providers unavailable'):
 		await router.complete('test prompt')
 
 
