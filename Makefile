@@ -1,4 +1,4 @@
-.PHONY: help setup venv sync install-dev compile test test-unit test-integration lint check check-all format typecheck changelog-check doctor init-db coderabbit-review
+.PHONY: help setup venv sync install-dev compile test test-unit test-integration lint check check-all format typecheck changelog-check doctor init-db coderabbit-review graph-check test-graph test-graph-memory test-graph-leaks check-file-size check-slots
 
 UV ?= uv
 UV_PYTHON ?= 3.14
@@ -89,3 +89,42 @@ coderabbit-review: venv ## Run CodeRabbit review and save report to .coderabbit-
 	else \
 		echo "$(YELLOW)Running CodeRabbit via uv...$(RESET)" && time $(PYTHON) -m coderabbit review > .coderabbit-docs.md 2>&1; \
 	fi
+
+# ── Graph module checks ─────────────────────────────────────────────────────
+check-file-size: ## Файлы graph/ ≤ 300 строк
+	@echo "Checking file sizes in src/imbalance/graph/..."
+	@fail=0; \
+	for f in src/imbalance/graph/*.py; do \
+		lines=$$(wc -l < "$$f"); \
+		if [ "$$lines" -gt 300 ]; then \
+			echo "  FAIL: $$f — $$lines lines (max 300)"; fail=1; \
+		else \
+			echo "  OK:   $$f — $$lines lines"; \
+		fi; \
+	done; \
+	exit $$fail
+
+check-slots: ## Проверка что все dataclasses в graph/ имеют slots=True
+	@$(UV) run python -c "import ast, sys; from pathlib import Path; found = []; \
+for f in Path('src/imbalance/graph').glob('*.py'): \
+	t = ast.parse(f.read_text()); \
+	for n in ast.walk(t): \
+		if not isinstance(n, ast.ClassDef): continue; \
+		for d in n.decorator_list: \
+			if isinstance(d, ast.Call) and hasattr(d.func, 'id') and d.func.id == 'dataclass': \
+				k = {x.arg: x.value for x in d.keywords}; \
+				s = k.get('slots'); \
+				if not (s and isinstance(s, ast.Constant) and s.value): found.append(f'{f}:{n.lineno} class {n.name}'); \
+if found: [print(x) for x in found]; sys.exit(1 if found else 0); \
+print('All graph dataclasses have slots=True ✓')"
+
+test-graph: venv ## Unit + integration тесты graph-модуля
+	$(PYTHON) -m pytest tests/graph/unit tests/graph/integration -v --tb=short -x
+
+test-graph-memory: venv ## Memory тесты (медленные)
+	$(PYTHON) -m pytest tests/graph/memory -v --tb=long -s
+
+test-graph-leaks: venv ## Только leak-тесты с tracemalloc
+	CHECK_LEAKS=1 $(PYTHON) -m pytest tests/graph/memory/test_no_leaks.py -v -s
+
+graph-check: check-slots check-file-size lint test-graph ## Полная проверка graph
