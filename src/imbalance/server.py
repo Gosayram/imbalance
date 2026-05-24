@@ -5,6 +5,7 @@ import contextlib
 import logging
 import os
 import signal
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -67,6 +68,7 @@ class ImbalanceDaemon:
 		for item in due:
 			if not self._router:
 				break
+			start = time.monotonic()
 			try:
 				payload = FlushPayload.from_json(item.payload)
 				delta = await self._router.complete(
@@ -78,8 +80,20 @@ class ImbalanceDaemon:
 					await self.session_manager.mark_flushed(item.session_id)
 				else:
 					await queue.complete(item.id)
+				latency_ms = int((time.monotonic() - start) * 1000)
+				await self.db.execute(
+					'INSERT INTO flush_log(session_id, provider, attempt, success, latency_ms) VALUES (?, ?, ?, ?, ?)',
+					(item.session_id, 'unknown', item.attempts + 1, True, latency_ms),
+				)
+				await self.db.commit()
 				logger.info(f'Processed queued flush for session {item.session_id}')
 			except Exception as e:
+				latency_ms = int((time.monotonic() - start) * 1000)
+				await self.db.execute(
+					'INSERT INTO flush_log(session_id, provider, attempt, success, latency_ms, error) VALUES (?, ?, ?, ?, ?, ?)',
+					(item.session_id, 'unknown', item.attempts + 1, False, latency_ms, str(e)),
+				)
+				await self.db.commit()
 				next_retry = await queue.mark_failed(item.id, item.attempts + 1, str(e))
 				logger.warning(f'Flush for {item.session_id} failed, retry at {next_retry}: {e}')
 

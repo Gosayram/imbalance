@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from typing import Any
 
 from cachetools import TTLCache
@@ -112,8 +113,17 @@ class QueryEngine:
 		if cached is not None:
 			return cached
 
+		start = time.monotonic()
 		result = await self._standard_search(query, budget_tokens, scope, tags)
+		latency_ms = int((time.monotonic() - start) * 1000)
 		self._cache[key] = result
+
+		tokens_returned = sum(c.token_count for c in result.evidence)
+		source = 'fts5' if self._embedder is None else 'fts5+vec'
+		await self._log_retrieval(
+			query, scope, len(result.evidence), tokens_returned,
+			budget_tokens, latency_ms, source, session_id,
+		)
 		return result
 
 	async def _standard_search(
@@ -206,6 +216,12 @@ class QueryEngine:
 			selected.append(chunk)
 			used += chunk.token_count
 
+		tokens_returned = sum(c.token_count for c in selected)
+		await self._log_retrieval(
+			query, scope, len(selected), tokens_returned,
+			budget_tokens, 0, 'cache', None,
+		)
+
 		return ContextPack(
 			query=query,
 			budget_tokens=budget_tokens,
@@ -284,3 +300,34 @@ class QueryEngine:
 				merged.append(chunk)
 				seen.add(chunk.slug)
 		return merged
+
+	async def _log_retrieval(
+		self,
+		query: str,
+		scope: list[str] | None,
+		results_count: int,
+		tokens_returned: int,
+		tokens_budget: int,
+		latency_ms: int,
+		source: str,
+		session_id: str | None,
+	) -> None:
+		await self.store.db.execute(
+			"""
+			INSERT INTO retrieval_log(
+				session_id, query, scope, results_count,
+				tokens_returned, tokens_budget, latency_ms, source
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			""",
+			(
+				session_id,
+				query,
+				','.join(scope) if scope else None,
+				results_count,
+				tokens_returned,
+				tokens_budget,
+				latency_ms,
+				source,
+			),
+		)
+		await self.store.db.commit()

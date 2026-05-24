@@ -11,6 +11,7 @@ import typer
 from imbalance.core.project import Project, find_project_config, load_project
 from imbalance.core.query import QueryEngine
 from imbalance.core.queue import FlushQueue
+from imbalance.core.router import ModelRouter
 from imbalance.core.session import FlushPayload, SessionManager
 from imbalance.core.write import WriteEngine
 from imbalance.storage.db import integrity_check, open_db, run_migrations
@@ -329,7 +330,9 @@ async def _save_fact(
 	project = load_project()
 	db = await _open_project_db(project)
 	store = SQLiteStore(db, project.name)
-	result = await WriteEngine(store).save_fact(
+	router = ModelRouter(openrouter_key=_get_openrouter_key())
+	engine = WriteEngine(store, router)
+	result = await engine.save_fact(
 		content=content,
 		section=section,
 		slug=slug,
@@ -603,7 +606,6 @@ def kb_compact(
 
 async def _kb_compact(dry_run: bool) -> None:
 	from imbalance.core.compaction import KBCompactor
-	from imbalance.core.router import ModelRouter
 
 	project = load_project()
 	db = await _open_project_db(project)
@@ -892,11 +894,16 @@ async def _wiki_conflicts() -> None:
 
 
 @app.command('stats')
-def stats_cmd() -> None:
-	asyncio.run(_stats_cmd())
+def stats_cmd(
+	show: Annotated[
+		str | None,
+		typer.Option('--show', help='slow-queries|token-savings|provider-health'),
+	] = None,
+) -> None:
+	asyncio.run(_stats_cmd(show))
 
 
-async def _stats_cmd() -> None:
+async def _stats_cmd(show: str | None) -> None:
 	project = load_project()
 	db = await _open_project_db(project)
 	try:
@@ -904,28 +911,51 @@ async def _stats_cmd() -> None:
 
 		since = (datetime.now(UTC) - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-		retrieval = await db.execute_fetchall(
+		r = dict((await db.execute_fetchall(
 			'SELECT COUNT(*) as cnt, '
 			'COALESCE(AVG(latency_ms),0) as avg_ms, '
 			'COALESCE(AVG(tokens_returned),0) as avg_tokens '
 			'FROM retrieval_log WHERE timestamp >= ?',
 			(since,),
-		)
-		flush = await db.execute_fetchall(
+		))[0] or {})
+		f = dict((await db.execute_fetchall(
 			'SELECT COUNT(*) as cnt, '
 			'SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) as ok, '
 			'COALESCE(AVG(latency_ms),0) as avg_ms '
 			'FROM flush_log WHERE timestamp >= ?',
 			(since,),
-		)
-		r = dict(retrieval[0]) if retrieval else {}
-		f = dict(flush[0]) if flush else {}
-		typer.echo('--- Last 30 days ---')
-		typer.echo(f'Retrievals: {r.get("cnt", 0)} (avg {r.get("avg_ms", 0):.0f}ms, {r.get("avg_tokens", 0):.0f} tokens)')
-		flush_cnt = f.get('cnt', 0)
-		flush_ok = f.get('ok', 0)
-		ratio = f'{flush_ok}/{flush_cnt}' if flush_cnt else '0/0'
-		typer.echo(f'Flushes: {ratio} success (avg {f.get("avg_ms", 0):.0f}ms)')
+		))[0] or {})
+
+		if show == 'slow-queries':
+			rows = await db.execute_fetchall(
+				'SELECT query, latency_ms FROM retrieval_log WHERE latency_ms > 100 ORDER BY latency_ms DESC LIMIT 10',
+			)
+			typer.echo('Slow queries (>100ms):')
+			for row in rows:
+				typer.echo(f'  {row["latency_ms"]}ms: {row["query"][:60]}')
+		elif show == 'token-savings':
+			rows = await db.execute_fetchall(
+				'SELECT SUM(tokens_budget - tokens_returned) as saved FROM retrieval_log WHERE timestamp >= ?',
+				(since,),
+			)
+			saved = rows[0]['saved'] if rows else 0
+			typer.echo(f'Token savings (last 30d): {saved}')
+		elif show == 'provider-health':
+			rows = await db.execute_fetchall(
+				'SELECT provider, COUNT(*) as cnt, SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) as ok FROM flush_log WHERE timestamp >= ? GROUP BY provider',
+				(since,),
+			)
+			typer.echo('Provider health:')
+			for row in rows:
+				rate = row['ok'] / row['cnt'] * 100 if row['cnt'] else 0
+				typer.echo(f'  {row["provider"]}: {rate:.0f}% ({row["ok"]}/{row["cnt"]})')
+		else:
+			typer.echo('--- Last 30 days ---')
+			typer.echo(f'Retrievals: {r.get("cnt", 0)} (avg {r.get("avg_ms", 0):.0f}ms, {r.get("avg_tokens", 0):.0f} tokens)')
+			flush_cnt = f.get('cnt', 0)
+			flush_ok = f.get('ok', 0)
+			ratio = f'{flush_ok}/{flush_cnt}' if flush_cnt else '0/0'
+			typer.echo(f'Flushes: {ratio} success (avg {f.get("avg_ms", 0):.0f}ms)')
 	finally:
 		await db.close()
 
@@ -1039,7 +1069,6 @@ def consolidate_memories() -> None:
 
 async def _consolidate_memories() -> None:
 	from imbalance.core.consolidation import consolidate_raw_memories
-	from imbalance.core.router import ModelRouter
 
 	project = load_project()
 	db = await _open_project_db(project)
