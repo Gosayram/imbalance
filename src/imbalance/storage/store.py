@@ -42,6 +42,7 @@ class SQLiteStore:
 					token_count=excluded.token_count,
 					session_id=excluded.session_id,
 					machine_id=excluded.machine_id,
+					confirmation_count=confirmation_count+1,
 					updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
 				""",
 				(self.kb_name, section, slug, content, token_count, session_id, machine_id),
@@ -78,6 +79,7 @@ class SQLiteStore:
 		*,
 		limit: int = 8,
 		scope: list[str] | None = None,
+		tags: list[str] | None = None,
 	) -> list[ContextChunk]:
 		if limit < 1:
 			limit = 1
@@ -87,6 +89,13 @@ class SQLiteStore:
 			placeholders = ', '.join('?' for _ in scope)
 			scope_sql = f'AND ws.section IN ({placeholders})'
 			params.extend(scope)
+		tags_sql = ''
+		if tags:
+			tag_placeholders = ', '.join('?' for _ in tags)
+			tags_sql = (
+				f'AND ws.id IN (SELECT wt.section_id FROM wiki_tags wt WHERE wt.tag IN ({tag_placeholders}))'
+			)
+			params.extend(tags)
 		params.append(limit)
 
 		rows = await self.db.execute_fetchall(
@@ -104,6 +113,7 @@ class SQLiteStore:
 				AND wiki_fts MATCH ?
 				AND ws.archived = FALSE
 				{scope_sql}
+				{tags_sql}
 			ORDER BY score
 			LIMIT ?
 			""",

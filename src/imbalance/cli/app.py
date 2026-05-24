@@ -809,5 +809,208 @@ async def _flush_ci(
 		await db.close()
 
 
+@wiki_app.command('link')
+def wiki_link(
+	source: Annotated[str, typer.Argument(help='Source slug')],
+	target: Annotated[str, typer.Argument(help='Target slug')],
+	link_type: Annotated[str, typer.Option('--type', help='references|related|depends_on')] = 'references',
+) -> None:
+	asyncio.run(_wiki_link(source, target, link_type))
+
+
+async def _wiki_link(source: str, target: str, link_type: str) -> None:
+	from imbalance.core.links import create_link
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		await create_link(db, project.name, source, target, link_type)
+		typer.echo(f'Linked {source} → {target} ({link_type})')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('unlink')
+def wiki_unlink(
+	source: Annotated[str, typer.Argument(help='Source slug')],
+	target: Annotated[str, typer.Argument(help='Target slug')],
+	link_type: Annotated[str, typer.Option('--type')] = 'references',
+) -> None:
+	asyncio.run(_wiki_unlink(source, target, link_type))
+
+
+async def _wiki_unlink(source: str, target: str, link_type: str) -> None:
+	from imbalance.core.links import remove_link
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		await remove_link(db, project.name, source, target, link_type)
+		typer.echo(f'Removed link {source} → {target}')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('conflicts')
+def wiki_conflicts() -> None:
+	asyncio.run(_wiki_conflicts())
+
+
+async def _wiki_conflicts() -> None:
+	from imbalance.core.conflicts import get_conflicts
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		conflicts = await get_conflicts(db, project.name)
+		if not conflicts:
+			typer.echo('No conflicts found')
+			return
+		for c in conflicts:
+			typer.echo(f'{c["source_slug"]} ↔ {c["target_slug"]} ({c["created_at"]})')
+	finally:
+		await db.close()
+
+
+@app.command('stats')
+def stats_cmd() -> None:
+	asyncio.run(_stats_cmd())
+
+
+async def _stats_cmd() -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		from datetime import UTC, datetime, timedelta
+
+		since = (datetime.now(UTC) - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+		retrieval = await db.execute_fetchall(
+			'SELECT COUNT(*) as cnt, '
+			'COALESCE(AVG(latency_ms),0) as avg_ms, '
+			'COALESCE(AVG(tokens_returned),0) as avg_tokens '
+			'FROM retrieval_log WHERE timestamp >= ?',
+			(since,),
+		)
+		flush = await db.execute_fetchall(
+			'SELECT COUNT(*) as cnt, '
+			'SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) as ok, '
+			'COALESCE(AVG(latency_ms),0) as avg_ms '
+			'FROM flush_log WHERE timestamp >= ?',
+			(since,),
+		)
+		r = dict(retrieval[0]) if retrieval else {}
+		f = dict(flush[0]) if flush else {}
+		typer.echo('--- Last 30 days ---')
+		typer.echo(f'Retrievals: {r.get("cnt", 0)} (avg {r.get("avg_ms", 0):.0f}ms, {r.get("avg_tokens", 0):.0f} tokens)')
+		flush_cnt = f.get('cnt', 0)
+		flush_ok = f.get('ok', 0)
+		ratio = f'{flush_ok}/{flush_cnt}' if flush_cnt else '0/0'
+		typer.echo(f'Flushes: {ratio} success (avg {f.get("avg_ms", 0):.0f}ms)')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('history')
+def wiki_history(
+	slug: Annotated[str, typer.Argument(help='Section slug')],
+) -> None:
+	asyncio.run(_wiki_history(slug))
+
+
+async def _wiki_history(slug: str) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT change_type, changed_at, changed_by FROM wiki_history '
+			'WHERE kb_name=? AND slug=? ORDER BY id',
+			(project.name, slug),
+		)
+		if not rows:
+			typer.echo(f'No history for {slug}')
+			return
+		for r in rows:
+			typer.echo(f'  [{r["change_type"]}] {r["changed_at"]} by {r["changed_by"] or "unknown"}')
+	finally:
+		await db.close()
+
+
+@app.command('export')
+def export_kb(
+	format: Annotated[str, typer.Option('--format', help='toml|sqlite')] = 'toml',
+	output: Annotated[str | None, typer.Option('--output')] = None,
+) -> None:
+	asyncio.run(_export_kb(format, output))
+
+
+async def _export_kb(format: str, output: str | None) -> None:
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		if format == 'sqlite':
+			out_path = output or f'{project.name}-kb-backup.db'
+			await db.execute(f"VACUUM INTO '{out_path}'")
+			await db.commit()
+			typer.echo(f'Exported SQLite snapshot: {out_path}')
+			return
+
+		rows = await db.execute_fetchall(
+			'SELECT section, slug, content, token_count FROM wiki_sections '
+			'WHERE kb_name=? AND archived=FALSE ORDER BY section, slug',
+			(project.name,),
+		)
+		lines = [f'# imbalance KB export: {project.name}', f'# Sections: {len(rows)}', '']
+		for r in rows:
+			lines.append('[[section]]')
+			lines.append(f'section = "{r["section"]}"')
+			lines.append(f'slug = "{r["slug"]}"')
+			lines.append(f'token_count = {r["token_count"]}')
+			lines.append('content = """')
+			lines.append(r['content'])
+			lines.append('"""')
+			lines.append('')
+		result = '\n'.join(lines)
+		if output:
+			from pathlib import Path
+
+			Path(output).write_text(result, encoding='utf-8')
+			typer.echo(f'Exported to {output}')
+		else:
+			typer.echo(result)
+	finally:
+		await db.close()
+
+
+@app.command('import')
+def import_kb(
+	path: Annotated[str, typer.Argument(help='TOML file to import')],
+	merge: Annotated[bool, typer.Option('--merge/--replace')] = True,
+) -> None:
+	asyncio.run(_import_kb(path, merge))
+
+
+async def _import_kb(path: str, merge: bool) -> None:
+	import tomllib
+	from pathlib import Path
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		raw = tomllib.loads(Path(path).read_text(encoding='utf-8'))
+		sections = raw.get('section', [])
+		store = SQLiteStore(db, project.name)
+		for s in sections:
+			await store.upsert_section(
+				slug=s['slug'],
+				section=s['section'],
+				content=s['content'],
+				token_count=s.get('token_count', len(s['content'].split())),
+			)
+		typer.echo(f'Imported {len(sections)} sections (merge={merge})')
+	finally:
+		await db.close()
+
+
 if __name__ == '__main__':
 	app()

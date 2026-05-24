@@ -91,6 +91,7 @@ class QueryEngine:
 		budget_tokens: int = 2000,
 		scope: list[str] | None = None,
 		session_id: str | None = None,
+		tags: list[str] | None = None,
 	) -> ContextPack:
 		compaction_chunk = None
 		if session_id:
@@ -106,7 +107,7 @@ class QueryEngine:
 		if cached is not None:
 			return cached
 
-		result = await self._standard_search(query, budget_tokens, scope)
+		result = await self._standard_search(query, budget_tokens, scope, tags)
 		self._cache[key] = result
 		return result
 
@@ -115,6 +116,7 @@ class QueryEngine:
 		query: str,
 		budget_tokens: int,
 		scope: list[str] | None,
+		tags: list[str] | None = None,
 	) -> ContextPack:
 		summary = None
 		summary_budget = min(500, int(budget_tokens * 0.2))
@@ -125,7 +127,12 @@ class QueryEngine:
 			if summary:
 				evidence_budget -= summary_budget
 
-		evidence = await self._hybrid_search(query, scope)
+		evidence = await self._hybrid_search(query, scope, tags)
+
+		linked_slugs = await self._expand_graph(evidence)
+		if linked_slugs:
+			linked_chunks = await self._fetch_linked(linked_slugs, scope)
+			evidence = self._merge_linked(evidence, linked_chunks)
 
 		selected = []
 		used = 0
@@ -152,9 +159,9 @@ class QueryEngine:
 		)
 
 	async def _hybrid_search(
-		self, query: str, scope: list[str] | None
+		self, query: str, scope: list[str] | None, tags: list[str] | None = None
 	) -> list[ContextChunk]:
-		fts_results = await self.store.fts_search(query, limit=8, scope=scope)
+		fts_results = await self.store.fts_search(query, limit=8, scope=scope, tags=tags)
 
 		if self._embedder is None:
 			return fts_results
@@ -220,3 +227,52 @@ class QueryEngine:
 			token_count=r['token_count'],
 			confidence=1.0,
 		)
+
+	async def _expand_graph(self, evidence: list[ContextChunk]) -> dict[str, float]:
+		from imbalance.core.links import expand_links
+
+		slugs = [c.slug for c in evidence]
+		return await expand_links(self.store.db, self.store.kb_name, slugs)
+
+	async def _fetch_linked(
+		self, linked_slugs: dict[str, float], scope: list[str] | None
+	) -> list[ContextChunk]:
+		if not linked_slugs:
+			return []
+		placeholders = ', '.join('?' for _ in linked_slugs)
+		params: list[object] = [self.store.kb_name]
+		params.extend(linked_slugs.keys())
+		scope_sql = ''
+		if scope:
+			ph = ', '.join('?' for _ in scope)
+			scope_sql = f'AND section IN ({ph})'
+			params.extend(scope)
+		rows = await self.store.db.execute_fetchall(
+			f"""SELECT slug, section, content, token_count, confirmation_count
+			FROM wiki_sections
+			WHERE kb_name=? AND slug IN ({placeholders}) AND archived=FALSE {scope_sql}""",
+			params,
+		)
+		return [
+			ContextChunk(
+				slug=r['slug'],
+				section=r['section'],
+				content=r['content'],
+				score=linked_slugs.get(r['slug'], 0.5),
+				token_count=int(r['token_count']),
+				confidence=min(float(r['confirmation_count']) / 10.0, 1.0),
+			)
+			for r in rows
+		]
+
+	@staticmethod
+	def _merge_linked(
+		evidence: list[ContextChunk], linked: list[ContextChunk]
+	) -> list[ContextChunk]:
+		seen = {c.slug for c in evidence}
+		merged = list(evidence)
+		for chunk in linked:
+			if chunk.slug not in seen:
+				merged.append(chunk)
+				seen.add(chunk.slug)
+		return merged

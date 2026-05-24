@@ -28,8 +28,19 @@ class WriteEngine:
 		slug: str | None = None,
 		tags: list[str] | None = None,
 		session_id: str | None = None,
+		dedup: bool = True,
 	) -> SaveResult:
 		final_slug = slug or _default_slug(section)
+
+		if dedup and not slug:
+			from imbalance.core.dedup import dedup_check
+
+			result = await dedup_check(
+				self.store.db, self.store.kb_name, content, section
+			)
+			if result.is_duplicate and result.existing_slug:
+				final_slug = result.existing_slug
+
 		token_count = estimate_tokens(content)
 		section_id = await self.store.upsert_section(
 			slug=final_slug,
