@@ -194,6 +194,25 @@ async def _flush_session(
 	)
 	path = await manager.prepare_flush(args['session_id'], payload)
 	await manager.enqueue_pending(args['session_id'])
+
+	summary = args.get('summary', '')
+	for dec in args.get('decisions', []):
+		await db.execute(
+			'INSERT INTO raw_memories(kb_name, session_id, memory_type, content, confidence) VALUES (?, ?, ?, ?, ?)',
+			(project.name, args['session_id'], 'decision', dec, 0.9),
+		)
+	for step in args.get('next_steps', []):
+		await db.execute(
+			'INSERT INTO raw_memories(kb_name, session_id, memory_type, content, confidence) VALUES (?, ?, ?, ?, ?)',
+			(project.name, args['session_id'], 'workflow', step, 0.7),
+		)
+	if summary:
+		await db.execute(
+			'INSERT INTO raw_memories(kb_name, session_id, memory_type, content, confidence) VALUES (?, ?, ?, ?, ?)',
+			(project.name, args['session_id'], 'preference', summary, 0.8),
+		)
+	await db.commit()
+
 	return [types.TextContent(type='text', text=f'Checkpointed {args["session_id"]}: {path}')]
 
 
