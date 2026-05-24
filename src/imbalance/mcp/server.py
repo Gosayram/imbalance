@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from typing import Any
 
 import aiosqlite
@@ -19,6 +20,41 @@ from imbalance.storage.store import SQLiteStore
 logger = logging.getLogger(__name__)
 
 server = Server('imbalance')
+
+
+class AgentType(Enum):
+	CLAUDE = 'claude'
+	CURSOR = 'cursor'
+	CODEX = 'codex'
+	GEMINI = 'gemini'
+	UNKNOWN = 'unknown'
+
+
+def detect_agent(user_agent: str, x_agent: str | None) -> AgentType:
+	"""Detect agent from headers."""
+	if 'claudecode' in user_agent.lower() or 'claude' in x_agent.lower():
+		return AgentType.CLAUDE
+	if 'cursor' in user_agent.lower():
+		return AgentType.CURSOR
+	if 'codex' in user_agent.lower():
+		return AgentType.CODEX
+	if 'gemini' in user_agent.lower():
+		return AgentType.GEMINI
+	return AgentType.UNKNOWN
+
+
+def format_for_agent(agent: AgentType, content: str) -> str:
+	"""Format response based on agent type."""
+	if agent == AgentType.CURSOR:
+		lines = content.split('\n')[:20]
+		return '\n'.join(lines[:10]) + '\n...' if len(lines) > 10 else content
+	if agent == AgentType.CODEX:
+		lines = content.split('\n')
+		return '\n'.join(
+			f'<line>{line[:150]}</line>' if len(line) > 150 else f'<line>{line}</line>'
+			for line in lines[:15]
+		)
+	return content
 
 
 @server.list_tools()
@@ -206,7 +242,9 @@ async def handle_call_tool(
 		await db.close()
 
 
-async def _get_context(store: SQLiteStore, args: dict[str, Any]) -> list[types.TextContent]:
+async def _get_context(
+	store: SQLiteStore, args: dict[str, Any], agent: AgentType = AgentType.UNKNOWN
+) -> list[types.TextContent]:
 	query = args.get('query', '')
 	budget = args.get('budget_tokens', 2000)
 	scope = args.get('scope')
@@ -218,7 +256,8 @@ async def _get_context(store: SQLiteStore, args: dict[str, Any]) -> list[types.T
 		scope=scope,
 		session_id=session_id,
 	)
-	return [types.TextContent(type='text', text=pack.render_markdown())]
+	content = format_for_agent(agent, pack.render_markdown())
+	return [types.TextContent(type='text', text=content)]
 
 
 async def _save_fact(store: SQLiteStore, args: dict[str, Any]) -> list[types.TextContent]:

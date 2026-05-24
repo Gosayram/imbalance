@@ -25,16 +25,22 @@ class AllProvidersUnavailable(RuntimeError):
 	pass
 
 
+# Cache keys for prompt caching
+_prompt_cache: dict[str, str] = {}  # kb_name -> cached_content_hash
+
+
 class ModelRouter:
 	_breakers: dict[str, CircuitBreaker]
 
 	def __init__(
 		self,
 		openrouter_key: str | None = None,
+		anthropic_key: str | None = None,
 		ollama_base_url: str | None = None,
 		ollama_model: str | None = None,
 	) -> None:
 		self.openrouter_key = openrouter_key
+		self.anthropic_key = anthropic_key
 		self._breakers = {}
 		self._ollama_base_url = ollama_base_url or 'http://localhost:11434'
 		self._ollama_model = ollama_model or 'qwen3:8b'
@@ -43,6 +49,10 @@ class ModelRouter:
 				api_key=openrouter_key,
 				base_url='https://openrouter.ai/api/v1',
 			)
+		if anthropic_key:
+			from anthropic import AsyncAnthropic
+
+			self._anthropic_client = AsyncAnthropic(api_key=anthropic_key)
 
 	def _get_breaker(self, model: str) -> CircuitBreaker:
 		if model not in self._breakers:
@@ -138,6 +148,70 @@ class ModelRouter:
 		if content is None:
 			raise RuntimeError('Empty response from Ollama')
 		return content
+
+	async def _call_anthropic_with_cache(
+		self,
+		system: str,
+		kb_content: str,
+		session_content: str,
+		max_tokens: int,
+		kb_name: str,
+	) -> str:
+		"""Call Anthropic API with prompt caching for KB content."""
+		if not hasattr(self, '_anthropic_client'):
+			raise RuntimeError('Anthropic client not configured')
+
+		current_hash = str(hash(kb_content))
+		_prompt_cache[kb_name] = current_hash
+
+		response = await self._anthropic_client.messages.create(
+			model='claude-3-5-haiku-20241022',
+			max_tokens=max_tokens,
+			system=[
+				{
+					'type': 'text',
+					'text': system,
+					'cache_control': {'type': 'ephemeral'},
+				}
+			],
+			messages=[
+				{
+					'role': 'user',
+					'content': [
+						{
+							'type': 'text',
+							'text': kb_content,
+							'cache_control': {'type': 'ephemeral'},
+						},
+						{
+							'type': 'text',
+							'text': f'New session to merge:\n{session_content}',
+						},
+					],
+				}
+			],
+		)
+		return response.content[0].text if response.content else ''
+
+	async def flush_with_cache(
+		self,
+		system_prompt: str,
+		kb_content: str,
+		session_content: str,
+		kb_name: str,
+		max_tokens: int = 600,
+	) -> str:
+		"""Flush using Anthropic with prompt caching."""
+		try:
+			return await self._call_anthropic_with_cache(
+				system_prompt, kb_content, session_content, max_tokens, kb_name
+			)
+		except Exception as e:
+			logger.warning(f'Anthropic cache call failed: {e}, falling back to OpenRouter')
+			return await self.complete(
+				f'System: {system_prompt}\n\nKB Content:\n{kb_content}\n\nSession:\n{session_content}',
+				max_tokens=max_tokens,
+			)
 
 	async def apply_delta(self, delta_json: str, db_session_manager: Any) -> None:
 		try:
