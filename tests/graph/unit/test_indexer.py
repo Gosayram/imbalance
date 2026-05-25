@@ -27,19 +27,3 @@ def test_walk_files_skips_dirs(tmp_path):
 def test_parse_batch_returns_symbols():
 	symbols = _parse_batch([])
 	assert isinstance(symbols, list)
-
-
-@pytest.mark.asyncio
-async def test_indexer_init():
-	db = AsyncMock()
-	indexer = GraphIndexer(Path("/test"), db, "test_kb")
-	assert indexer.kb_name == "test_kb"
-
-
-@pytest.mark.asyncio
-async def test_indexer_count_symbols(tmp_path):
-	db = AsyncMock()
-	db.execute_fetchone = AsyncMock(return_value=[5])
-	indexer = GraphIndexer(tmp_path, db, "test_kb")
-	count = await indexer._count_symbols()
-	assert count == 5

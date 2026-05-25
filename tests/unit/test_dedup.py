@@ -1,5 +1,5 @@
 import pytest
-from imbalance.core.dedup import _jaccard_similarity, DedupResult, _cosine_similarity
+from imbalance.core.dedup import _jaccard_similarity, DedupResult, _cosine_similarity, JACCARD_THRESHOLD
 
 
 def test_jaccard_similarity_identical():
@@ -29,3 +29,10 @@ def test_cosine_similarity_orthogonal():
 
 def test_cosine_similarity_zero_vector():
 	assert _cosine_similarity([0.0, 0.0], [1.0, 1.0]) == 0.0
+
+
+def test_dedup_result():
+	result = DedupResult(is_duplicate=True, existing_slug="test", similarity=0.8)
+	assert result.is_duplicate is True
+	assert result.existing_slug == "test"
+	assert result.similarity == 0.8

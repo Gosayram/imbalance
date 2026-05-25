@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
@@ -34,3 +35,25 @@ async def test_daemon_shutdown():
 	await daemon.shutdown()
 	assert daemon._shutting_down is True
 	assert daemon._accepting is False
+
+
+@pytest.mark.asyncio
+async def test_daemon_shutdown_idempotent():
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	await daemon.shutdown()
+	await daemon.shutdown()
+	assert daemon._shutting_down is True
+
+
+@pytest.mark.asyncio
+async def test_daemon_shutdown_with_in_flight():
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	daemon._in_flight.add(asyncio.create_task(asyncio.sleep(0.01)))
+	await daemon.shutdown()
+	assert daemon._shutting_down is True

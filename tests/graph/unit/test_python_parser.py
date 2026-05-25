@@ -1,5 +1,5 @@
 import pytest
-from imbalance.graph.parser import PythonASTParser
+from imbalance.graph.parser import PythonASTParser, FileParser, CompiledPatternParser, _get_patterns
 from imbalance.graph.models import Symbol
 
 
@@ -71,3 +71,54 @@ def test_symbol_uses_slots(parser):
 	src = b'def hello(): pass'
 	sym = parser.parse(src, 'test.py')[0]
 	assert not hasattr(sym, '__dict__')
+
+
+def test_file_parser_python():
+	fp = FileParser()
+	# Test with a real temp file
+	import tempfile
+	import os
+	with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+		f.write('def test_func():\n    pass\n')
+		f.flush()
+		symbols = fp.parse(f.name)
+		assert any(s.name == 'test_func' for s in symbols)
+		os.unlink(f.name)
+
+
+def test_file_parser_javascript(tmp_path):
+	from pathlib import Path
+	test_file = tmp_path / "test.js"
+	test_file.write_text("function hello() { return 1; }")
+	fp = FileParser()
+	symbols = fp.parse(str(test_file))
+	assert any(s.name == 'hello' for s in symbols)
+
+
+def test_file_parser_typescript(tmp_path):
+	from pathlib import Path
+	test_file = tmp_path / "test.ts"
+	test_file.write_text("function hello() { return 1; }")
+	fp = FileParser()
+	symbols = fp.parse(str(test_file))
+	assert any(s.name == 'hello' for s in symbols)
+
+
+def test_file_parser_go(tmp_path):
+	from pathlib import Path
+	test_file = tmp_path / "test.go"
+	test_file.write_text("func main() { println() }")
+	fp = FileParser()
+	symbols = fp.parse(str(test_file))
+	assert any(s.name == 'main' for s in symbols)
+
+
+def test_file_parser_missing_file():
+	fp = FileParser()
+	symbols = fp.parse('/nonexistent/file.py')
+	assert symbols == ()
+
+
+def test_get_patterns_unknown():
+	patterns = _get_patterns('unknown_lang')
+	assert patterns == []

@@ -53,4 +53,40 @@ async def test_store_mark_raw_memories_consumed_empty():
 	db = AsyncMock()
 	store = SQLiteStore(db, "test")
 	await store.mark_raw_memories_consumed([])
+
+
+@pytest.mark.asyncio
+async def test_store_upsert_memory_summary():
+	db = AsyncMock()
+	store = SQLiteStore(db, "test")
+	await store.upsert_memory_summary("content", 5)
+
+
+@pytest.mark.asyncio
+async def test_store_insert_raw_memory():
+	db = AsyncMock()
+	cursor = AsyncMock()
+	cursor.lastrowid = 42
+	db.execute = AsyncMock(return_value=cursor)
+	store = SQLiteStore(db, "test")
+	result = await store.insert_raw_memory(session_id="s1", memory_type="fact", content="test")
+	assert result == 42
+
+
+@pytest.mark.asyncio
+async def test_store_fetch_unconsumed_raw_memories():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	store = SQLiteStore(db, "test")
+	results = await store.fetch_unconsumed_raw_memories()
+	assert results == []
+
+
+@pytest.mark.asyncio
+async def test_store_fts_search_with_limit_zero():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	store = SQLiteStore(db, "test")
+	results = await store.fts_search("query", limit=0)
+	assert results == []
 	# Should return early without calling execute
