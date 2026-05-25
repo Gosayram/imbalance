@@ -21,3 +21,10 @@ def test_estimate_tokens_fallback():
 		mock_enc.side_effect = Exception('error')
 		result = estimate_tokens('hello world')
 		assert result == 2  # Fallback to word count
+
+
+def test_estimate_tokens_single_word_fallback():
+	with patch('imbalance.core.tokens._get_encoding') as mock_enc:
+		mock_enc.side_effect = Exception('error')
+		result = estimate_tokens('hello')
+		assert result == 1

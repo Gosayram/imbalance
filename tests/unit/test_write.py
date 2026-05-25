@@ -78,3 +78,14 @@ async def test_write_engine_save_fact_no_dedup():
 	engine = WriteEngine(mock_store)
 	result = await engine.save_fact(content="test content", section="custom", dedup=False)
 	assert result.slug.startswith("custom/")
+
+
+@pytest.mark.asyncio
+async def test_write_engine_save_fact_with_tags():
+	mock_store = MagicMock()
+	mock_store.upsert_section = AsyncMock(return_value=1)
+	mock_store.db = AsyncMock()
+	
+	engine = WriteEngine(mock_store)
+	result = await engine.save_fact(content="test content", section="context", tags=["tag1", "tag2"])
+	assert result.slug == "context"
