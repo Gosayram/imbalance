@@ -29,11 +29,61 @@ async def test_store_upsert_section():
 
 
 @pytest.mark.asyncio
+async def test_store_upsert_section_with_tags():
+	db = AsyncMock()
+	db.execute = AsyncMock(return_value=AsyncMock(lastrowid=1))
+	db._fetchone = AsyncMock(return_value={'id': 1})
+	db.executemany = AsyncMock()
+	store = SQLiteStore(db, "test")
+	section_id = await store.upsert_section(
+		slug="test-slug", section="overview", content="content", token_count=10, tags=["tag1", "tag2"]
+	)
+	assert section_id == 1
+
+
+@pytest.mark.asyncio
+async def test_store_upsert_section_error():
+	db = AsyncMock()
+	db.execute = AsyncMock(side_effect=Exception("db error"))
+	db.rollback = AsyncMock()
+	store = SQLiteStore(db, "test")
+	with pytest.raises(Exception):
+		await store.upsert_section(slug="test-slug", section="overview", content="content", token_count=10)
+
+
+@pytest.mark.asyncio
 async def test_store_fts_search():
 	db = AsyncMock()
 	db.execute_fetchall = AsyncMock(return_value=[])
 	store = SQLiteStore(db, "test")
 	results = await store.fts_search("query")
+	assert results == []
+
+
+@pytest.mark.asyncio
+async def test_store_fts_search_with_scope():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	store = SQLiteStore(db, "test")
+	results = await store.fts_search("query", scope=["decisions"])
+	assert results == []
+
+
+@pytest.mark.asyncio
+async def test_store_fts_search_with_tags():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	store = SQLiteStore(db, "test")
+	results = await store.fts_search("query", tags=["tag1"])
+	assert results == []
+
+
+@pytest.mark.asyncio
+async def test_store_fts_search_limit_zero():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	store = SQLiteStore(db, "test")
+	results = await store.fts_search("query", limit=0)
 	assert results == []
 
 
@@ -46,6 +96,17 @@ async def test_store_get_memory_summary_none():
 	store = SQLiteStore(db, "test")
 	result = await store.get_memory_summary(100)
 	assert result is None
+
+
+@pytest.mark.asyncio
+async def test_store_get_memory_summary_truncated():
+	db = AsyncMock()
+	cursor = AsyncMock()
+	cursor.fetchone = AsyncMock(return_value={'content': 'a b c d e f g h i j k l m n o', 'token_count': 15})
+	db.execute = AsyncMock(return_value=cursor)
+	store = SQLiteStore(db, "test")
+	result = await store.get_memory_summary(10)
+	assert result == "a b c d e f g h i j"
 
 
 @pytest.mark.asyncio
@@ -83,15 +144,6 @@ async def test_store_fetch_unconsumed_raw_memories():
 
 
 @pytest.mark.asyncio
-async def test_store_fts_search_with_limit_zero():
-	db = AsyncMock()
-	db.execute_fetchall = AsyncMock(return_value=[])
-	store = SQLiteStore(db, "test")
-	results = await store.fts_search("query", limit=0)
-	assert results == []
-
-
-@pytest.mark.asyncio
 async def test_store_vec_search_empty():
 	db = AsyncMock()
 	db.execute_fetchall = AsyncMock(return_value=[])
@@ -103,7 +155,6 @@ async def test_store_vec_search_empty():
 @pytest.mark.asyncio
 async def test_store_vec_search_with_results():
 	db = AsyncMock()
-	# First call returns vec results, second call returns section data
 	db.execute_fetchall = AsyncMock(side_effect=[
 		[{'section_id': 1, 'distance': 0.5}],
 		[{'id': 1, 'slug': 'test', 'section': 'overview', 'content': 'content', 'token_count': 10, 'confirmation_count': 5}]
@@ -111,4 +162,15 @@ async def test_store_vec_search_with_results():
 	store = SQLiteStore(db, "test")
 	results = await store.vec_search([0.1, 0.2, 0.3])
 	assert len(results) == 1
-	# Should return early without calling execute
+
+
+@pytest.mark.asyncio
+async def test_store_vec_search_with_scope():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(side_effect=[
+		[{'section_id': 1, 'distance': 0.5}],
+		[{'id': 1, 'slug': 'test', 'section': 'overview', 'content': 'content', 'token_count': 10, 'confirmation_count': 5}]
+	])
+	store = SQLiteStore(db, "test")
+	results = await store.vec_search([0.1, 0.2, 0.3], scope=["decisions"])
+	assert len(results) == 1

@@ -39,3 +39,30 @@ def test_notify_alerts():
 	alerts = ["warning: test alert"]
 	result = notify_alerts(alerts)
 	assert result == 1
+
+
+def test_check_kb_health_circuit_breaker():
+	alerts = check_kb_health(
+		queue_depth=0,
+		last_flush_age_days=0,
+		circuit_breaker_open=True,
+		queue_threshold=5,
+		stale_days=14,
+	)
+	assert len(alerts) == 1
+
+
+def test_check_kb_health_multiple_alerts():
+	alerts = check_kb_health(
+		queue_depth=10,
+		last_flush_age_days=20,
+		circuit_breaker_open=False,
+		queue_threshold=5,
+		stale_days=14,
+	)
+	assert len(alerts) == 2
+
+
+def test_notify_alerts_empty():
+	result = notify_alerts([])
+	assert result == 0
