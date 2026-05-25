@@ -1,5 +1,11 @@
 import pytest
-from imbalance.core.templates import generate_claude_md, generate_agents_md
+from imbalance.core.templates import (
+	generate_claude_md,
+	generate_agents_md,
+	generate_cursor_mdc,
+	generate_gemini_md,
+	generate_copilot_section,
+)
 
 
 def test_generate_claude_md_python_backend():
@@ -34,3 +40,21 @@ def test_generate_agents_md():
 	result = generate_agents_md('TestAgentProject')
 	assert 'TestAgentProject' in result
 	assert 'Memory Protocol' in result
+
+
+def test_generate_cursor_mdc():
+	result = generate_cursor_mdc('CursorProject')
+	assert 'CursorProject' in result
+	assert 'MCP server' in result
+
+
+def test_generate_gemini_md():
+	result = generate_gemini_md('GeminiProject')
+	assert 'GeminiProject' in result
+	assert 'Memory Protocol' in result
+
+
+def test_generate_copilot_section():
+	result = generate_copilot_section('CopilotProject')
+	assert 'imbalance' in result
+	assert 'get-context' in result

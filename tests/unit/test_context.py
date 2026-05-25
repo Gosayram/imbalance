@@ -53,3 +53,26 @@ def test_context_pack_render_with_warnings():
 	)
 	result = pack.render_markdown()
 	assert "<warnings>" in result
+
+
+def test_context_pack_render_with_omitted():
+	pack = ContextPack(
+		query="test",
+		budget_tokens=2000,
+		precedence=["wiki"],
+		summary=None,
+		evidence=[],
+		omitted=["file1.py", "file2.py"],
+	)
+	result = pack.render_markdown()
+	assert "<context-pack>" in result
+
+
+def test_context_chunk_defaults():
+	chunk = ContextChunk(slug="s", section="sec", content="c", score=0.5, token_count=10)
+	assert chunk.confidence == 0.5
+
+
+def test_context_chunk_custom_confidence():
+	chunk = ContextChunk(slug="s", section="sec", content="c", score=0.5, token_count=10, confidence=0.8)
+	assert chunk.confidence == 0.8

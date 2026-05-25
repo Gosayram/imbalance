@@ -18,6 +18,21 @@ def test_default_slug_uuid():
 	assert slug.startswith('custom/')
 
 
+def test_default_slug_issues():
+	assert _default_slug('issues') == 'issues'
+
+
+def test_default_slug_about():
+	assert _default_slug('about') == 'about'
+
+
+def test_save_result():
+	result = SaveResult(slug="test", section_id=1, token_count=100)
+	assert result.slug == "test"
+	assert result.section_id == 1
+	assert result.token_count == 100
+
+
 @pytest.mark.asyncio
 async def test_write_engine_save_fact():
 	mock_store = MagicMock()
@@ -51,4 +66,15 @@ async def test_write_engine_save_fact_with_router():
 	
 	engine = WriteEngine(mock_store, router=mock_router)
 	result = await engine.save_fact(content="test content", section="custom")
+	assert result.slug.startswith("custom/")
+
+
+@pytest.mark.asyncio
+async def test_write_engine_save_fact_no_dedup():
+	mock_store = MagicMock()
+	mock_store.upsert_section = AsyncMock(return_value=1)
+	mock_store.db = AsyncMock()
+	
+	engine = WriteEngine(mock_store)
+	result = await engine.save_fact(content="test content", section="custom", dedup=False)
 	assert result.slug.startswith("custom/")
