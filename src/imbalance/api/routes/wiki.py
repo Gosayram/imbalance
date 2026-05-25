@@ -47,6 +47,7 @@ async def wiki_edit_form(request: Request, slug: str):
 		)
 		if not row:
 			from fastapi import HTTPException
+
 			raise HTTPException(status_code=404, detail='Section not found')
 		return request.app.state.templates.TemplateResponse(
 			'wiki/edit.html', {'request': request, 'section': dict(row[0])}
@@ -73,6 +74,7 @@ async def wiki_view(request: Request, slug: str):
 		)
 		if not row:
 			from fastapi import HTTPException
+
 			raise HTTPException(status_code=404, detail='Section not found')
 		r = dict(row[0])
 		md = mistune.create_markdown()
@@ -116,6 +118,7 @@ async def wiki_update(request: Request, slug: str):
 			slug=slug, section=section, content=content, token_count=token_count
 		)
 		from fastapi.responses import RedirectResponse
+
 		return RedirectResponse(url=f'/wiki/{slug}', status_code=303)
 	finally:
 		await db.close()

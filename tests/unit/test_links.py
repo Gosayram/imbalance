@@ -15,7 +15,8 @@ async def db(tmp_path):
 		)
 	""")
 	await db.commit()
-	return db
+	yield db
+	await db.close()
 
 
 @pytest.mark.asyncio

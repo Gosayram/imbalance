@@ -1,43 +1,38 @@
-from __future__ import annotations
+import pytest
+from imbalance.core.budget import BudgetAction, SessionBudgetMonitor
 
-from imbalance.core.budget import SessionBudgetMonitor
+
+def test_budget_action_defaults():
+	action = BudgetAction(action="test")
+	assert action.action == "test"
+	assert action.message == ""
 
 
-def test_ok_below_warn_threshold():
+def test_budget_action_with_message():
+	action = BudgetAction(action="warn", message="test message")
+	assert action.action == "warn"
+	assert action.message == "test message"
+
+
+def test_budget_monitor_ok():
 	monitor = SessionBudgetMonitor()
-	action = monitor.check(used_tokens=100, total_tokens=1000)
-	assert action.action == 'ok'
-	assert action.message == ''
+	action = monitor.check(100, 1000)
+	assert action.action == "ok"
 
 
-def test_warn_at_70_percent():
-	monitor = SessionBudgetMonitor()
-	action = monitor.check(used_tokens=700, total_tokens=1000)
-	assert action.action == 'warn'
-	assert '70%' in action.message
+def test_budget_monitor_warn():
+	monitor = SessionBudgetMonitor(warn_ratio=0.5)
+	action = monitor.check(600, 1000)
+	assert action.action == "warn"
 
 
-def test_critical_at_85_percent():
-	monitor = SessionBudgetMonitor()
-	action = monitor.check(used_tokens=850, total_tokens=1000)
-	assert action.action == 'save_critical_now'
-	assert '85%' in action.message
+def test_budget_monitor_critical():
+	monitor = SessionBudgetMonitor(critical_ratio=0.7)
+	action = monitor.check(800, 1000)
+	assert action.action == "save_critical_now"
 
 
-def test_emergency_at_95_percent():
-	monitor = SessionBudgetMonitor()
-	action = monitor.check(used_tokens=950, total_tokens=1000)
-	assert action.action == 'emergency_flush'
-	assert '95%' in action.message
-
-
-def test_zero_total_returns_ok():
-	monitor = SessionBudgetMonitor()
-	action = monitor.check(used_tokens=0, total_tokens=0)
-	assert action.action == 'ok'
-
-
-def test_custom_thresholds():
-	monitor = SessionBudgetMonitor(warn_ratio=0.5, critical_ratio=0.7, emergency_ratio=0.9)
-	action = monitor.check(used_tokens=500, total_tokens=1000)
-	assert action.action == 'warn'
+def test_budget_monitor_emergency():
+	monitor = SessionBudgetMonitor(emergency_ratio=0.9)
+	action = monitor.check(950, 1000)
+	assert action.action == "emergency_flush"

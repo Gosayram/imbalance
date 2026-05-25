@@ -57,14 +57,18 @@ def rrf_merge(
 		slug = chunk.slug
 		section_weight = weights.get(chunk.section, 1.0)
 		confidence_boost = confidence_weight * chunk.confidence
-		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1) + confidence_boost
+		scores[slug] = (
+			scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1) + confidence_boost
+		)
 		chunks[slug] = chunk
 
 	for rank, chunk in enumerate(vec_results):
 		slug = chunk.slug
 		section_weight = weights.get(chunk.section, 1.0)
 		confidence_boost = confidence_weight * chunk.confidence
-		scores[slug] = scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1) + confidence_boost
+		scores[slug] = (
+			scores.get(slug, 0.0) + section_weight / (RRF_K + rank + 1) + confidence_boost
+		)
 		if slug not in chunks:
 			chunks[slug] = chunk
 
@@ -121,8 +125,14 @@ class QueryEngine:
 		tokens_returned = sum(c.token_count for c in result.evidence)
 		source = 'fts5' if self._embedder is None else 'fts5+vec'
 		await self._log_retrieval(
-			query, scope, len(result.evidence), tokens_returned,
-			budget_tokens, latency_ms, source, session_id,
+			query,
+			scope,
+			len(result.evidence),
+			tokens_returned,
+			budget_tokens,
+			latency_ms,
+			source,
+			session_id,
 		)
 		return result
 
@@ -186,9 +196,7 @@ class QueryEngine:
 
 		try:
 			embeddings = await self._embedder.embed([query])
-			vec_results = await self.store.vec_search(
-				embeddings[0], limit=8, scope=scope
-			)
+			vec_results = await self.store.vec_search(embeddings[0], limit=8, scope=scope)
 			return rrf_merge(fts_results, vec_results, self._scope_weights, self._confidence_weight)
 		except Exception:
 			return fts_results
@@ -203,7 +211,9 @@ class QueryEngine:
 		compaction_budget = int(budget_tokens * 0.4)
 		regular_budget = budget_tokens - compaction_budget
 
-		summary = await self.store.get_memory_summary(max_tokens=min(300, int(regular_budget * 0.2)))
+		summary = await self.store.get_memory_summary(
+			max_tokens=min(300, int(regular_budget * 0.2))
+		)
 
 		evidence = await self.store.fts_search(query, limit=6, scope=scope)
 		selected: list[ContextChunk] = [compaction_chunk]
@@ -218,8 +228,14 @@ class QueryEngine:
 
 		tokens_returned = sum(c.token_count for c in selected)
 		await self._log_retrieval(
-			query, scope, len(selected), tokens_returned,
-			budget_tokens, 0, 'cache', None,
+			query,
+			scope,
+			len(selected),
+			tokens_returned,
+			budget_tokens,
+			0,
+			'cache',
+			None,
 		)
 
 		return ContextPack(

@@ -56,7 +56,7 @@ async def detect_conflict(
 			conflicting_slug=parsed.get('conflicting_slug'),
 			reason=parsed.get('reason'),
 		)
-	except (json.JSONDecodeError, KeyError, TypeError):
+	except json.JSONDecodeError, KeyError, TypeError:
 		logger.warning('Conflict detection failed to parse LLM response')
 		return ConflictResult(conflict=False)
 	except Exception as exc:
@@ -90,7 +90,7 @@ async def mark_conflict(
 
 async def get_conflicts(db: aiosqlite.Connection, kb_name: str) -> list[dict]:
 	rows = await db.execute_fetchall(
-		"SELECT source_slug, target_slug, created_at FROM kb_links "
+		'SELECT source_slug, target_slug, created_at FROM kb_links '
 		"WHERE kb_name=? AND link_type='conflicts' ORDER BY created_at DESC",
 		(kb_name,),
 	)

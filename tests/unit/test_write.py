@@ -23,9 +23,10 @@ async def test_save_fact_basic():
 	mock_store = MagicMock()
 	mock_store.kb_name = "test_kb"
 	mock_store.upsert_section = AsyncMock(return_value=1)
-	mock_store.db = MagicMock()
-	
+	mock_store.db = AsyncMock()
+	mock_store.db.execute_fetchall = AsyncMock(return_value=[])
+
 	engine = WriteEngine(mock_store)
-	result = await engine.save_fact(content="test content", section="decisions")
+	result = await engine.save_fact(content="test content", section="decisions", dedup=False)
 	assert result.slug is not None
 	assert result.token_count > 0

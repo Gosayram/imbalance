@@ -93,9 +93,7 @@ class SQLiteStore:
 		tags_sql = ''
 		if tags:
 			tag_placeholders = ', '.join('?' for _ in tags)
-			tags_sql = (
-				f'AND ws.id IN (SELECT wt.section_id FROM wiki_tags wt WHERE wt.tag IN ({tag_placeholders}))'
-			)
+			tags_sql = f'AND ws.id IN (SELECT wt.section_id FROM wiki_tags wt WHERE wt.tag IN ({tag_placeholders}))'
 			params.extend(tags)
 		params.append(limit)
 
@@ -162,9 +160,7 @@ class SQLiteStore:
 			await self.db.rollback()
 			raise
 
-	async def fetch_unconsumed_raw_memories(
-		self, limit: int = 128
-	) -> list[aiosqlite.Row]:
+	async def fetch_unconsumed_raw_memories(self, limit: int = 128) -> list[aiosqlite.Row]:
 		rows = await self.db.execute_fetchall(
 			"""
 			SELECT id, memory_type, content, confidence, session_id

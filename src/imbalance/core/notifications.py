@@ -17,9 +17,7 @@ def send_system_notification(title: str, message: str) -> bool:
 			subprocess.run(['osascript', '-e', script], check=True, timeout=5)
 			return True
 		elif system == 'Linux':
-			subprocess.run(
-				['notify-send', title, message], check=True, timeout=5
-			)
+			subprocess.run(['notify-send', title, message], check=True, timeout=5)
 			return True
 		else:
 			logger.debug(f'Notifications not supported on {system}')
@@ -40,7 +38,9 @@ def check_kb_health(
 	if queue_depth > queue_threshold:
 		alerts.append(f'Flush queue has {queue_depth} pending items (threshold: {queue_threshold})')
 	if last_flush_age_days > stale_days:
-		alerts.append(f'KB not updated for {last_flush_age_days:.0f} days (threshold: {stale_days:.0f})')
+		alerts.append(
+			f'KB not updated for {last_flush_age_days:.0f} days (threshold: {stale_days:.0f})'
+		)
 	if circuit_breaker_open:
 		alerts.append('Circuit breaker is open — provider unavailable')
 	return alerts

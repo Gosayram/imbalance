@@ -7,7 +7,7 @@ from imbalance.storage.db import checkpoint, integrity_check
 async def test_checkpoint_valid_mode():
 	mock_db = AsyncMock()
 	await checkpoint(mock_db, "PASSIVE")
-	mock_db.execute.assert_called()
+	mock_db.execute.assert_awaited()
 
 
 @pytest.mark.asyncio

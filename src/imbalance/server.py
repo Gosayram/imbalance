@@ -114,11 +114,12 @@ class ImbalanceDaemon:
 		depth = (queue_depth or {}).get('cnt', 0)
 
 		last_flush_row = await self.db.execute_fetchone(
-			"SELECT MAX(changed_at) as last FROM wiki_sections WHERE kb_name=?",
+			'SELECT MAX(changed_at) as last FROM wiki_sections WHERE kb_name=?',
 			(self.project.name,),
 		)
 		last_flush = last_flush_row['last'] if last_flush_row else None
 		from datetime import datetime
+
 		if last_flush:
 			try:
 				last_dt = datetime.fromisoformat(last_flush.replace('Z', '+00:00'))

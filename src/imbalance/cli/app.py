@@ -196,7 +196,7 @@ def daemon_stop() -> None:
 
 	try:
 		pid = int(PID_FILE.read_text().strip())
-	except (ValueError, OSError):
+	except ValueError, OSError:
 		typer.echo('Invalid PID file')
 		raise typer.Exit(code=1) from None
 
@@ -237,7 +237,7 @@ def _install_launchd() -> None:
 		typer.echo('imbalance binary not found in PATH')
 		raise typer.Exit(code=1)
 
-	plist = f'''<?xml version="1.0" encoding="UTF-8"?>
+	plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -250,7 +250,7 @@ def _install_launchd() -> None:
     <key>StandardOutPath</key><string>/tmp/imbalance-daemon.log</string>
     <key>StandardErrorPath</key><string>/tmp/imbalance-daemon.err</string>
 </dict>
-</plist>'''
+</plist>"""
 
 	plist_path = Path.home() / 'Library' / 'LaunchAgents' / 'ai.imbalance.daemon.plist'
 	plist_path.parent.mkdir(parents=True, exist_ok=True)
@@ -268,7 +268,7 @@ def _install_systemd() -> None:
 		typer.echo('imbalance binary not found in PATH')
 		raise typer.Exit(code=1)
 
-	unit = f'''[Unit]
+	unit = f"""[Unit]
 Description=imbalance knowledge base daemon
 After=network.target
 
@@ -280,7 +280,7 @@ RestartSec=10
 
 [Install]
 WantedBy=default.target
-'''
+"""
 
 	unit_path = Path.home() / '.config' / 'systemd' / 'user' / 'imbalance.service'
 	unit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -448,7 +448,12 @@ async def _queue_retry(session_id: str | None) -> None:
 
 @app.command('setup')
 def setup_all_agents(
-	agent: Annotated[str | None, typer.Option('--agent', help='Specific agent: claude|cursor|codex|gemini|windsurf|copilot|all')] = None,
+	agent: Annotated[
+		str | None,
+		typer.Option(
+			'--agent', help='Specific agent: claude|cursor|codex|gemini|windsurf|copilot|all'
+		),
+	] = None,
 	force: Annotated[bool, typer.Option('--force')] = False,
 	mcp_configs: Annotated[bool, typer.Option('--mcp-configs')] = False,
 	skills: Annotated[bool, typer.Option('--skills')] = False,
@@ -554,7 +559,9 @@ async def _run_hook(
 				monitor = SessionBudgetMonitor()
 				action = monitor.check(used_tokens=1500, total_tokens=20000)
 				if action.action == 'warn':
-					typer.echo(f'[imbalance] Context at {action.action}. Call save_fact() for key findings.')
+					typer.echo(
+						f'[imbalance] Context at {action.action}. Call save_fact() for key findings.'
+					)
 		else:
 			raise ValueError(f'Unknown hook type: {hook_type}')
 	finally:
@@ -633,15 +640,21 @@ async def _setup_all_agents(
 	if 'all' in agents_list or 'cursor' in agents_list:
 		cursor_dir = cwd / '.cursor' / 'rules'
 		cursor_dir.mkdir(parents=True, exist_ok=True)
-		(cursor_dir / 'imbalance.mdc').write_text(generate_cursor_mdc(project.name), encoding='utf-8')
-		generated.append({'agent': 'cursor', 'path': '.cursor/rules/imbalance.mdc', 'mode': 'created'})
+		(cursor_dir / 'imbalance.mdc').write_text(
+			generate_cursor_mdc(project.name), encoding='utf-8'
+		)
+		generated.append(
+			{'agent': 'cursor', 'path': '.cursor/rules/imbalance.mdc', 'mode': 'created'}
+		)
 		typer.echo('Created .cursor/rules/imbalance.mdc')
 
 	if 'all' in agents_list or 'copilot' in agents_list:
 		copilot_file = cwd / '.github' / 'copilot-instructions.md'
 		copilot_file.parent.mkdir(parents=True, exist_ok=True)
 		_append_section(copilot_file, generate_copilot_section(project.name))
-		generated.append({'agent': 'copilot', 'path': '.github/copilot-instructions.md', 'mode': 'updated'})
+		generated.append(
+			{'agent': 'copilot', 'path': '.github/copilot-instructions.md', 'mode': 'updated'}
+		)
 		typer.echo('Updated .github/copilot-instructions.md')
 
 	if 'all' in agents_list or 'codex' in agents_list:
@@ -667,7 +680,9 @@ async def _setup_all_agents(
 	if skills and ('all' in agents_list or 'codex' in agents_list):
 		_codex_skills_dir = Path.home() / '.agents' / 'skills'
 		_codex_skills_dir.mkdir(parents=True, exist_ok=True)
-		(_codex_skills_dir / 'imbalance-load' / 'SKILL.md').parent.mkdir(parents=True, exist_ok=True)
+		(_codex_skills_dir / 'imbalance-load' / 'SKILL.md').parent.mkdir(
+			parents=True, exist_ok=True
+		)
 		(_codex_skills_dir / 'imbalance-load' / 'SKILL.md').write_text(
 			'---\nname: imbalance-load\ndescription: Load project context\n---\n'
 			'Call get_context with task description. Budget: 2000 tokens.',
@@ -682,7 +697,13 @@ async def _setup_all_agents(
 	if report:
 		import json
 
-		report_data = {'ok': True, 'generated': generated, 'skipped': skipped, 'warnings': warnings, 'errors': []}
+		report_data = {
+			'ok': True,
+			'generated': generated,
+			'skipped': skipped,
+			'warnings': warnings,
+			'errors': [],
+		}
 		typer.echo(json.dumps(report_data, indent=2))
 
 
@@ -790,7 +811,9 @@ async def _embeddings_set(provider: str, model: str | None) -> None:
 		for k, v in emb.items():
 			block += f'{k} = "{v}"\n'
 		if '[embeddings]' in content:
-			content = re.sub(r'\[embeddings\].*?(?=\n\[|\Z)', block.strip(), content, flags=re.DOTALL)
+			content = re.sub(
+				r'\[embeddings\].*?(?=\n\[|\Z)', block.strip(), content, flags=re.DOTALL
+			)
 		else:
 			content = content.rstrip() + '\n\n' + block
 	else:
@@ -856,7 +879,9 @@ async def _kb_status() -> None:
 		typer.echo(f'Archived: {archived_cnt}')
 		if last:
 			r = last[0]
-			typer.echo(f'Last compaction: {r["ran_at"]} ({r["sections_total"]} total, {r["sections_archived"]} archived, {r["duration_sec"]:.1f}s)')
+			typer.echo(
+				f'Last compaction: {r["ran_at"]} ({r["sections_total"]} total, {r["sections_archived"]} archived, {r["duration_sec"]:.1f}s)'
+			)
 		else:
 			typer.echo('No compaction runs recorded')
 	finally:
@@ -903,8 +928,8 @@ async def _wiki_restore(slug: str) -> None:
 	db = await _open_project_db(project)
 	try:
 		await db.execute(
-			"UPDATE wiki_sections SET archived=FALSE, archived_at=NULL, archive_reason=NULL "
-			"WHERE kb_name=? AND slug=? AND archived=TRUE",
+			'UPDATE wiki_sections SET archived=FALSE, archived_at=NULL, archive_reason=NULL '
+			'WHERE kb_name=? AND slug=? AND archived=TRUE',
 			(project.name, slug),
 		)
 		await db.commit()
@@ -915,7 +940,9 @@ async def _wiki_restore(slug: str) -> None:
 
 @wiki_app.command('purge')
 def wiki_purge(
-	older_than_days: Annotated[int, typer.Option('--older-than', help='Purge archived older than N days')] = 90,
+	older_than_days: Annotated[
+		int, typer.Option('--older-than', help='Purge archived older than N days')
+	] = 90,
 ) -> None:
 	asyncio.run(_wiki_purge(older_than_days))
 
@@ -925,7 +952,7 @@ async def _wiki_purge(older_than_days: int) -> None:
 	db = await _open_project_db(project)
 	try:
 		rows = await db.execute_fetchall(
-			"SELECT slug FROM wiki_sections WHERE kb_name=? AND archived=TRUE "
+			'SELECT slug FROM wiki_sections WHERE kb_name=? AND archived=TRUE '
 			"AND archived_at < datetime('now', ? || ' days')",
 			(project.name, f'-{older_than_days}'),
 		)
@@ -934,11 +961,11 @@ async def _wiki_purge(older_than_days: int) -> None:
 			return
 		for r in rows:
 			await db.execute(
-				"DELETE FROM wiki_fts WHERE rowid IN (SELECT id FROM wiki_sections WHERE kb_name=? AND slug=?)",
+				'DELETE FROM wiki_fts WHERE rowid IN (SELECT id FROM wiki_sections WHERE kb_name=? AND slug=?)',
 				(project.name, r['slug']),
 			)
 			await db.execute(
-				"DELETE FROM wiki_sections WHERE kb_name=? AND slug=?",
+				'DELETE FROM wiki_sections WHERE kb_name=? AND slug=?',
 				(project.name, r['slug']),
 			)
 		await db.commit()
@@ -1040,7 +1067,9 @@ async def _flush_ci(
 def wiki_link(
 	source: Annotated[str, typer.Argument(help='Source slug')],
 	target: Annotated[str, typer.Argument(help='Target slug')],
-	link_type: Annotated[str, typer.Option('--type', help='references|related|depends_on')] = 'references',
+	link_type: Annotated[
+		str, typer.Option('--type', help='references|related|depends_on')
+	] = 'references',
 ) -> None:
 	asyncio.run(_wiki_link(source, target, link_type))
 
@@ -1117,20 +1146,30 @@ async def _stats_cmd(show: str | None) -> None:
 
 		since = (datetime.now(UTC) - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-		r = dict((await db.execute_fetchall(
-			'SELECT COUNT(*) as cnt, '
-			'COALESCE(AVG(latency_ms),0) as avg_ms, '
-			'COALESCE(AVG(tokens_returned),0) as avg_tokens '
-			'FROM retrieval_log WHERE timestamp >= ?',
-			(since,),
-		))[0] or {})
-		f = dict((await db.execute_fetchall(
-			'SELECT COUNT(*) as cnt, '
-			'SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) as ok, '
-			'COALESCE(AVG(latency_ms),0) as avg_ms '
-			'FROM flush_log WHERE timestamp >= ?',
-			(since,),
-		))[0] or {})
+		r = dict(
+			(
+				await db.execute_fetchall(
+					'SELECT COUNT(*) as cnt, '
+					'COALESCE(AVG(latency_ms),0) as avg_ms, '
+					'COALESCE(AVG(tokens_returned),0) as avg_tokens '
+					'FROM retrieval_log WHERE timestamp >= ?',
+					(since,),
+				)
+			)[0]
+			or {}
+		)
+		f = dict(
+			(
+				await db.execute_fetchall(
+					'SELECT COUNT(*) as cnt, '
+					'SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) as ok, '
+					'COALESCE(AVG(latency_ms),0) as avg_ms '
+					'FROM flush_log WHERE timestamp >= ?',
+					(since,),
+				)
+			)[0]
+			or {}
+		)
 
 		if show == 'slow-queries':
 			rows = await db.execute_fetchall(
@@ -1157,7 +1196,9 @@ async def _stats_cmd(show: str | None) -> None:
 				typer.echo(f'  {row["provider"]}: {rate:.0f}% ({row["ok"]}/{row["cnt"]})')
 		else:
 			typer.echo('--- Last 30 days ---')
-			typer.echo(f'Retrievals: {r.get("cnt", 0)} (avg {r.get("avg_ms", 0):.0f}ms, {r.get("avg_tokens", 0):.0f} tokens)')
+			typer.echo(
+				f'Retrievals: {r.get("cnt", 0)} (avg {r.get("avg_ms", 0):.0f}ms, {r.get("avg_tokens", 0):.0f} tokens)'
+			)
 			flush_cnt = f.get('cnt', 0)
 			flush_ok = f.get('ok', 0)
 			ratio = f'{flush_ok}/{flush_cnt}' if flush_cnt else '0/0'
@@ -1186,7 +1227,9 @@ async def _wiki_history(slug: str) -> None:
 			typer.echo(f'No history for {slug}')
 			return
 		for r in rows:
-			typer.echo(f'  [{r["change_type"]}] {r["changed_at"]} by {r["changed_by"] or "unknown"}')
+			typer.echo(
+				f'  [{r["change_type"]}] {r["changed_at"]} by {r["changed_by"] or "unknown"}'
+			)
 	finally:
 		await db.close()
 
@@ -1229,7 +1272,9 @@ async def _wiki_diff(slug: str, v1: int, v2: int) -> None:
 @wiki_app.command('rollback')
 def wiki_rollback(
 	slug: Annotated[str, typer.Argument(help='Section slug')],
-	to: Annotated[str | None, typer.Option('--to', help='Date (YYYY-MM-DD) or version number')] = None,
+	to: Annotated[
+		str | None, typer.Option('--to', help='Date (YYYY-MM-DD) or version number')
+	] = None,
 ) -> None:
 	asyncio.run(_wiki_rollback(slug, to))
 
@@ -1250,7 +1295,7 @@ async def _wiki_rollback(slug: str, to: str | None) -> None:
 			content = row['content']
 		else:
 			row = await db.execute_fetchone(
-				"SELECT content FROM wiki_history WHERE kb_name=? AND slug=? AND date(changed_at) <= ? ORDER BY id DESC LIMIT 1",
+				'SELECT content FROM wiki_history WHERE kb_name=? AND slug=? AND date(changed_at) <= ? ORDER BY id DESC LIMIT 1',
 				(project.name, slug, to),
 			)
 			if not row:
@@ -1379,7 +1424,9 @@ def scan_code(
 	extract: Annotated[
 		str | None, typer.Option('--extract', help='Filter: decisions|patterns|issues|notes')
 	] = None,
-	watch: Annotated[bool, typer.Option('--watch', help='Watch mode: re-scan on file changes')] = False,
+	watch: Annotated[
+		bool, typer.Option('--watch', help='Watch mode: re-scan on file changes')
+	] = False,
 ) -> None:
 	"""Scan codebase for IMBALANCE: markers and import into KB."""
 	from imbalance.core.scanner import scan_directory
@@ -1387,6 +1434,7 @@ def scan_code(
 	root = Path(directory).resolve()
 	if watch:
 		import time
+
 		typer.echo('Watching for changes... (Ctrl+C to stop)')
 		hashes: dict[Path, float] = {}
 		try:
@@ -1399,7 +1447,9 @@ def scan_code(
 					mtime = hit.file.stat().st_mtime
 					if hashes.get(hit.file) != mtime:
 						hashes[hit.file] = mtime
-						typer.echo(f'{hit.file.relative_to(root)}:{hit.line} [{hit.marker_type}] {hit.content}')
+						typer.echo(
+							f'{hit.file.relative_to(root)}:{hit.line} [{hit.marker_type}] {hit.content}'
+						)
 		except KeyboardInterrupt:
 			typer.echo('\nStopped watching')
 			return
@@ -1435,9 +1485,7 @@ def eval_retrieval(
 	asyncio.run(_eval_retrieval(query, expected, scope))
 
 
-async def _eval_retrieval(
-	query: str, expected: str | None, scope: str | None
-) -> None:
+async def _eval_retrieval(query: str, expected: str | None, scope: str | None) -> None:
 	from imbalance.core.eval import EvalQuery, run_eval
 
 	project = load_project()
@@ -1477,6 +1525,7 @@ async def _eval_run(file: str | None) -> None:
 
 		if file:
 			import json
+
 			queries = [EvalQuery(**q) for q in json.loads(Path(file).read_text())]
 		else:
 			rows = await db.execute_fetchall(
@@ -1506,7 +1555,6 @@ def eval_record(
 
 async def _eval_record(session: str) -> None:
 	import json
-
 
 	project = load_project()
 	db = await _open_project_db(project)

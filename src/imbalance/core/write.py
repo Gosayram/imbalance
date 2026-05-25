@@ -37,9 +37,7 @@ class WriteEngine:
 		if dedup and not slug:
 			from imbalance.core.dedup import dedup_check
 
-			result = await dedup_check(
-				self.store.db, self.store.kb_name, content, section
-			)
+			result = await dedup_check(self.store.db, self.store.kb_name, content, section)
 			if result.is_duplicate and result.existing_slug:
 				final_slug = result.existing_slug
 

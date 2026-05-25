@@ -13,7 +13,10 @@ def git_commit_after_flush(repo_root: Path, message: str) -> bool:
 		return False
 	try:
 		subprocess.run(
-			['git', 'add', '-A'], cwd=repo_root, check=True, capture_output=True,
+			['git', 'add', '-A'],
+			cwd=repo_root,
+			check=True,
+			capture_output=True,
 		)
 		subprocess.run(
 			['git', 'commit', '-m', message, '--allow-empty'],

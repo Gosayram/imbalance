@@ -75,7 +75,7 @@ async def handle_list_tools() -> list[types.Tool]:
 		openWorldHint=True,
 	)
 	return [
-types.Tool(
+		types.Tool(
 			name='get_context',
 			description='Retrieve relevant context from the knowledge base (read-only, safe)',
 			inputSchema={
@@ -327,7 +327,7 @@ async def _resume_session(
 		return [types.TextContent(type='text', text=f'Session {session_id} already active')]
 
 	await db.execute(
-		"UPDATE sessions SET status=? WHERE id=?",
+		'UPDATE sessions SET status=? WHERE id=?',
 		(SessionStatus.ACTIVE.value, session_id),
 	)
 	await db.commit()
@@ -342,7 +342,9 @@ async def _report_context_usage(arguments: dict[str, Any]) -> list[types.TextCon
 		used_tokens=arguments.get('used_tokens', 0),
 		total_tokens=arguments.get('total_tokens', 1),
 	)
-	return [types.TextContent(type='text', text=action.message if action.message else action.action)]
+	return [
+		types.TextContent(type='text', text=action.message if action.message else action.action)
+	]
 
 
 async def _save_compaction_summary(
@@ -411,14 +413,14 @@ async def list_resources() -> list[types.Resource]:
 	try:
 		rows = await db.execute_fetchall(
 			'SELECT slug, section, updated_at FROM wiki_sections '
-			"WHERE kb_name=? AND archived=FALSE ORDER BY section, slug",
+			'WHERE kb_name=? AND archived=FALSE ORDER BY section, slug',
 			(_project.name,),
 		)
 		return [
 			types.Resource(
 				uri=f'imbalance://kb/{_project.name}/{row["slug"]}',
 				name=row['slug'],
-				description=f"Wiki section: {row['section']} (updated {row['updated_at'][:10]})",
+				description=f'Wiki section: {row["section"]} (updated {row["updated_at"][:10]})',
 				mimeType='text/markdown',
 			)
 			for row in rows

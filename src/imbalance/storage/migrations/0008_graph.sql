@@ -18,7 +18,8 @@ CREATE INDEX IF NOT EXISTS idx_code_symbols_file
 
 CREATE TABLE IF NOT EXISTS trigram_index (
 	trigram TEXT NOT NULL,
-	rowid INTEGER NOT NULL REFERENCES code_symbols(id)
+	rowid INTEGER NOT NULL REFERENCES code_symbols(id),
+	UNIQUE(trigram, rowid)
 );
 
 CREATE INDEX IF NOT EXISTS idx_trigram_lookup

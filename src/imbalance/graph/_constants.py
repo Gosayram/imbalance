@@ -1,34 +1,38 @@
 from __future__ import annotations
 
-SKIP_DIRS = frozenset({
-	'.git',
-	'__pycache__',
-	'node_modules',
-	'.venv',
-	'venv',
-	'dist',
-	'build',
-	'.tox',
-	'.eggs',
-	'*.egg-info',
-})
+SKIP_DIRS = frozenset(
+	{
+		'.git',
+		'__pycache__',
+		'node_modules',
+		'.venv',
+		'venv',
+		'dist',
+		'build',
+		'.tox',
+		'.eggs',
+		'*.egg-info',
+	}
+)
 
-SOURCE_EXTS = frozenset({
-	'.py',
-	'.pyi',
-	'.pyx',
-	'.ts',
-	'.tsx',
-	'.js',
-	'.jsx',
-	'.go',
-	'.rs',
-	'.java',
-	'.c',
-	'.cpp',
-	'.h',
-	'.hpp',
-})
+SOURCE_EXTS = frozenset(
+	{
+		'.py',
+		'.pyi',
+		'.pyx',
+		'.ts',
+		'.tsx',
+		'.js',
+		'.jsx',
+		'.go',
+		'.rs',
+		'.java',
+		'.c',
+		'.cpp',
+		'.h',
+		'.hpp',
+	}
+)
 
 _EXT_TO_LANG = {
 	'.py': 'python',

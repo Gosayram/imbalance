@@ -38,9 +38,7 @@ async def remove_link(
 	await db.commit()
 
 
-async def get_links(
-	db: aiosqlite.Connection, kb_name: str, slug: str
-) -> list[dict]:
+async def get_links(db: aiosqlite.Connection, kb_name: str, slug: str) -> list[dict]:
 	rows = await db.execute_fetchall(
 		'SELECT target_slug, link_type, created_at FROM kb_links '
 		'WHERE kb_name=? AND source_slug=? ORDER BY link_type, target_slug',

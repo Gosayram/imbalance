@@ -48,7 +48,7 @@ async def consolidate_raw_memories(
 	current_summary = await store.get_memory_summary(max_tokens=max_summary_tokens) or ''
 
 	formatted = '\n'.join(
-		f"- [{r['memory_type']}] (conf={r['confidence']:.2f}, session={r['session_id'][:8]}...) {r['content']}"
+		f'- [{r["memory_type"]}] (conf={r["confidence"]:.2f}, session={r["session_id"][:8]}...) {r["content"]}'
 		for r in raw
 	)
 

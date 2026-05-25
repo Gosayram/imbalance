@@ -58,17 +58,14 @@ async def build_trigram_index(
 				batch.append(pair)
 
 		if len(batch) >= 50_000:
-			await db.executemany(
-				'INSERT OR IGNORE INTO trigram_index VALUES (?,?)', batch
-			)
+			n = len(batch)
+			await db.executemany('INSERT OR IGNORE INTO trigram_index VALUES (?,?)', batch)
 			await db.commit()
 			batch.clear()
-			inserted += 50_000
+			inserted += n
 
 	if batch:
-		await db.executemany(
-			'INSERT OR IGNORE INTO trigram_index VALUES (?,?)', batch
-		)
+		await db.executemany('INSERT OR IGNORE INTO trigram_index VALUES (?,?)', batch)
 		await db.commit()
 		inserted += len(batch)
 

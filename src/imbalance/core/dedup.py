@@ -34,8 +34,7 @@ async def dedup_check(
 	section: str,
 ) -> DedupResult:
 	rows = await db.execute_fetchall(
-		'SELECT slug, content FROM wiki_sections '
-		'WHERE kb_name=? AND section=? AND archived=FALSE',
+		'SELECT slug, content FROM wiki_sections WHERE kb_name=? AND section=? AND archived=FALSE',
 		(kb_name, section),
 	)
 
@@ -43,7 +42,6 @@ async def dedup_check(
 		return DedupResult(is_duplicate=False)
 
 	try:
-
 		embedder = _get_embedder()
 		if embedder is not None:
 			new_emb = (await embedder.embed([new_content]))[0]
@@ -52,9 +50,7 @@ async def dedup_check(
 				existing_emb = (await embedder.embed([existing_content]))[0]
 				sim = _cosine_similarity(new_emb, existing_emb)
 				if sim > 0.92:
-					return DedupResult(
-						is_duplicate=True, existing_slug=r['slug'], similarity=sim
-					)
+					return DedupResult(is_duplicate=True, existing_slug=r['slug'], similarity=sim)
 			return DedupResult(is_duplicate=False)
 	except Exception:
 		pass

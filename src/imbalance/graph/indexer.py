@@ -4,14 +4,14 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Iterator
 
 import aiosqlite
 
 from imbalance.graph._constants import SKIP_DIRS, SOURCE_EXTS
-from imbalance.graph.models import Symbol, IndexStats
+from imbalance.graph.models import IndexStats, Symbol
 from imbalance.graph.parser import FileParser
 from imbalance.graph.trigram import build_trigram_index
 
@@ -61,7 +61,7 @@ class GraphIndexer:
 		all_symbols: list[Symbol] = []
 		loop = asyncio.get_event_loop()
 
-		async with ProcessPoolExecutor(
+		with ProcessPoolExecutor(
 			max_workers=n_workers,
 			max_tasks_per_child=200,
 		) as executor:
@@ -69,10 +69,7 @@ class GraphIndexer:
 
 			for i in range(0, len(batches), 4):
 				chunk = batches[i : i + 4]
-				futures = [
-					loop.run_in_executor(executor, _parse_batch, b)
-					for b in chunk
-				]
+				futures = [loop.run_in_executor(executor, _parse_batch, b) for b in chunk]
 				results = await asyncio.gather(*futures, return_exceptions=True)
 
 				for result in results:
@@ -132,7 +129,7 @@ class GraphIndexer:
 		return row[0] if row else 0
 
 	async def _resolve_trigrams(self) -> None:
-		rows = await self.db.fetchall(
+		rows = await self.db.execute_fetchall(
 			'SELECT id, name FROM code_symbols WHERE kb_name = ?',
 			(self.kb_name,),
 		)

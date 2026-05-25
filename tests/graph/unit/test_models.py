@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import FrozenInstanceError
 from imbalance.graph.models import Symbol
 
 
@@ -12,7 +13,7 @@ def test_symbol_is_frozen():
 		signature='def hello()',
 		language='python',
 	)
-	with pytest.raises(Exception):
+	with pytest.raises(FrozenInstanceError):
 		sym.name = 'changed'
 
 

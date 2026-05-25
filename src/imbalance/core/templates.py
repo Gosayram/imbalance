@@ -103,6 +103,7 @@ Token budget: 2000.
 - `context/` — general project state
 """
 
+
 # Agent-specific generators
 def generate_agents_md(project_name: str) -> str:
 	"""Generate AGENTS.md content (cross-agent standard)."""
@@ -111,6 +112,7 @@ def generate_agents_md(project_name: str) -> str:
 
 def generate_claude_md(template: str, project_name: str = 'Project') -> str:
 	import sys
+
 	if template not in TEMPLATES:
 		available = ', '.join(TEMPLATES.keys())
 		raise ValueError(f'Unknown template: {template}. Available: {available}')

@@ -79,7 +79,9 @@ class EvalReport:
 	def avg_token_efficiency(self) -> float:
 		if not self.results:
 			return 0.0
-		return sum(r.tokens_used / max(r.tokens_budget, 1) for r in self.results) / len(self.results)
+		return sum(r.tokens_used / max(r.tokens_budget, 1) for r in self.results) / len(
+			self.results
+		)
 
 	def format_summary(self) -> str:
 		lines = [
