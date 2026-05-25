@@ -94,3 +94,14 @@ async def test_build_trigram_index_multiple():
 	mock_db.commit = AsyncMock()
 	result = await build_trigram_index(mock_db, {'hello': 1, 'world': 2})
 	assert result > 0
+
+
+def test_extract_trigrams_unicode():
+	result = _extract_trigrams("héllo")
+	assert len(result) > 0
+
+
+def test_extract_trigrams_whitespace():
+	result = _extract_trigrams("hello world")
+	assert "hel" in result
+	assert "wor" in result

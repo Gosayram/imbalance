@@ -122,3 +122,22 @@ def test_file_parser_missing_file():
 def test_get_patterns_unknown():
 	patterns = _get_patterns('unknown_lang')
 	assert patterns == []
+
+
+def test_parses_nested_class(parser):
+	src = b"""
+class Outer:
+	class Inner:
+		def method(self): pass
+"""
+	symbols = parser.parse(src, 'test.py')
+	names = {s.name for s in symbols}
+	assert 'Outer' in names
+	assert 'Inner' in names
+
+
+def test_parses_imports(parser):
+	src = b'import os\nfrom sys import path'
+	symbols = parser.parse(src, 'test.py')
+	# imports are not parsed as symbols, just verify no crash
+	assert isinstance(symbols, tuple)
