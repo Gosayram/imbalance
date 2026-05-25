@@ -89,4 +89,26 @@ async def test_store_fts_search_with_limit_zero():
 	store = SQLiteStore(db, "test")
 	results = await store.fts_search("query", limit=0)
 	assert results == []
+
+
+@pytest.mark.asyncio
+async def test_store_vec_search_empty():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	store = SQLiteStore(db, "test")
+	results = await store.vec_search([0.1, 0.2, 0.3])
+	assert results == []
+
+
+@pytest.mark.asyncio
+async def test_store_vec_search_with_results():
+	db = AsyncMock()
+	# First call returns vec results, second call returns section data
+	db.execute_fetchall = AsyncMock(side_effect=[
+		[{'section_id': 1, 'distance': 0.5}],
+		[{'id': 1, 'slug': 'test', 'section': 'overview', 'content': 'content', 'token_count': 10, 'confirmation_count': 5}]
+	])
+	store = SQLiteStore(db, "test")
+	results = await store.vec_search([0.1, 0.2, 0.3])
+	assert len(results) == 1
 	# Should return early without calling execute

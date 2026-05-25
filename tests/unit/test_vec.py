@@ -28,6 +28,11 @@ def test_floats_to_blob():
 	assert len(result) == 12  # 3 floats * 4 bytes each
 
 
+def test_floats_to_blob_empty():
+	result = _floats_to_blob([])
+	assert result == b''
+
+
 @pytest.mark.asyncio
 async def test_is_vec_available_import_error():
 	db = AsyncMock()
