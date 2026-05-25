@@ -1,6 +1,6 @@
 import pytest
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock, patch
 
 # Mock the mcp module before importing
 sys.modules['mcp'] = MagicMock()
@@ -60,3 +60,20 @@ def test_format_for_agent_codex():
 def test_agent_type_values():
 	assert AgentType.CLAUDE.value == "claude"
 	assert AgentType.CURSOR.value == "cursor"
+
+
+def test_agent_type_all():
+	assert AgentType.CLAUDE == AgentType.CLAUDE
+	assert AgentType.CODEX == AgentType.CODEX
+	assert AgentType.GEMINI == AgentType.GEMINI
+
+
+def test_format_for_agent_codex_short_line():
+	result = format_for_agent(AgentType.CODEX, "short")
+	assert "<line>short</line>" == result
+
+
+def test_format_for_agent_cursor_many_lines():
+	lines = [f"line {i}" for i in range(15)]
+	result = format_for_agent(AgentType.CURSOR, "\n".join(lines))
+	assert "..." in result

@@ -80,3 +80,23 @@ async def test_ollama_ping_failure():
 	result = await prov.ping()
 	assert result is False
 	del sys.modules['ollama']
+
+
+def test_openai_provider_url():
+	prov = OpenAICompatProvider(base_url="http:// custom")
+	assert prov.base_url == "http:// custom"
+
+
+@pytest.mark.asyncio
+async def test_build_provider_ollama():
+	config = EmbeddingConfig(provider="ollama", model="test")
+	with patch("imbalance.core.embeddings.OllamaProvider") as mock_prov:
+		result = await build_provider(config)
+		mock_prov.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_build_provider_openai():
+	config = EmbeddingConfig(provider="openai", model="text-embedding-3-small", api_key="key")
+	result = await build_provider(config)
+	assert result is not None

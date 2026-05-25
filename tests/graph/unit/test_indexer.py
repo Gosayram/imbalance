@@ -84,3 +84,10 @@ async def test_resolve_trigrams():
 	indexer = GraphIndexer(Path("."), db, "test_kb")
 	await indexer._resolve_trigrams()
 	db.execute_fetchall.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_index_project_no_db():
+	indexer = GraphIndexer(Path("."), None, "test_kb")
+	with pytest.raises(Exception):
+		await indexer.index_project()
