@@ -60,3 +60,17 @@ async def test_query_engine_read_only_mode():
 	engine = QueryEngine(mock_store, memory_mode=ContextMode.READ_ONLY)
 	result = await engine.get_context_pack("test", budget_tokens=100)
 	assert any('read-only' in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_query_engine_with_memory():
+	mock_store = MagicMock()
+	mock_store.get_memory_summary = AsyncMock(return_value="existing summary")
+	mock_store.fts_search = AsyncMock(return_value=[])
+	mock_store.db = AsyncMock()
+	mock_store.db.execute = AsyncMock()
+	mock_store.db.commit = AsyncMock()
+	
+	engine = QueryEngine(mock_store)
+	result = await engine.get_context_pack("test", budget_tokens=100)
+	assert result.summary == "existing summary"

@@ -102,3 +102,17 @@ async def test_flush_queue_reset_all_retries():
 	queue = FlushQueue(db)
 	count = await queue.reset_all_retries()
 	assert count == 3
+
+
+def test_retry_delays():
+	assert len(RETRY_DELAYS_SECONDS) > 0
+	assert RETRY_DELAYS_SECONDS[0] == 60
+
+
+@pytest.mark.asyncio
+async def test_flush_queue_items():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	queue = FlushQueue(db)
+	results = await queue.items()
+	assert results == []

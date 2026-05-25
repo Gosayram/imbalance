@@ -77,3 +77,14 @@ async def test_session_manager_get_found():
 	result = await manager.get("test-id")
 	assert result is not None
 	assert result.id == "test-id"
+
+
+def test_session_record_creation():
+	record = SessionRecord(
+		id="test-id",
+		kb_name="test_kb",
+		machine_id="host1",
+		status=SessionStatus.ACTIVE,
+		log_path=None
+	)
+	assert record.id == "test-id"

@@ -52,3 +52,19 @@ async def test_consolidate_router_error():
 	router.complete = AsyncMock(side_effect=Exception("error"))
 	result = await consolidate_raw_memories(store, router)
 	assert result.updated is False
+
+
+@pytest.mark.asyncio
+async def test_consolidate_with_existing_summary():
+	store = AsyncMock()
+	store.fetch_unconsumed_raw_memories = AsyncMock(return_value=[
+		{'id': 1, 'memory_type': 'test', 'confidence': 0.5, 'session_id': 'sess123', 'content': 'test content'}
+	])
+	store.get_memory_summary = AsyncMock(return_value='existing summary')
+	store.upsert_memory_summary = AsyncMock()
+	store.mark_raw_memories_consumed = AsyncMock()
+	router = AsyncMock()
+	router.complete = AsyncMock(return_value='new summary')
+	result = await consolidate_raw_memories(store, router)
+	assert result.updated is True
+	assert result.memories_consumed == 1

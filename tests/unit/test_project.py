@@ -25,3 +25,9 @@ def test_project_config_defaults():
 def test_default_data_dir():
 	result = default_data_dir()
 	assert isinstance(result, Path)
+
+
+def test_notification_config_custom():
+	config = NotificationConfig(enabled=False, queue_size_threshold=10)
+	assert config.enabled is False
+	assert config.queue_size_threshold == 10

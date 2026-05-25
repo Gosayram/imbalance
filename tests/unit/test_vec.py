@@ -90,3 +90,21 @@ async def test_ensure_vec_table_with_dimension():
 	with patch("imbalance.storage.vec.is_vec_available", return_value=True):
 		result = await ensure_vec_table(db, dimension=1536)
 		assert result is True
+
+
+def test_floats_to_blob_single():
+	result = _floats_to_blob([1.5])
+	assert len(result) == 4
+
+
+def test_floats_to_blob_many():
+	result = _floats_to_blob([float(i) for i in range(100)])
+	assert len(result) == 400
+
+
+@pytest.mark.asyncio
+async def test_ensure_vec_table_with_dimension():
+	db = AsyncMock()
+	with patch("imbalance.storage.vec.is_vec_available", return_value=True):
+		result = await ensure_vec_table(db, dimension=1536)
+		assert result is True

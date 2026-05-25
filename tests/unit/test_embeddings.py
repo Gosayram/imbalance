@@ -100,3 +100,42 @@ async def test_build_provider_openai():
 	config = EmbeddingConfig(provider="openai", model="text-embedding-3-small", api_key="key")
 	result = await build_provider(config)
 	assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_build_provider_openrouter():
+	config = EmbeddingConfig(provider="openrouter", model="test", api_key="key")
+	result = await build_provider(config)
+	assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_build_provider_ollama_not_available():
+	import sys
+	original = sys.modules.get('ollama')
+	if 'ollama' in sys.modules:
+		del sys.modules['ollama']
+	# Make ollama import fail
+	sys.modules['ollama'] = None
+	try:
+		config = EmbeddingConfig(provider="ollama", model="test")
+		result = await build_provider(config)
+		assert result is None
+	finally:
+		if original:
+			sys.modules['ollama'] = original
+		elif 'ollama' in sys.modules:
+			del sys.modules['ollama']
+
+
+def test_openai_provider_url():
+	prov = OpenAICompatProvider(base_url="http:// custom")
+	assert prov.base_url == "http:// custom"
+
+
+def test_embedding_config_all_fields():
+	config = EmbeddingConfig(provider="test", model="model", api_key="key", base_url="http://localhost")
+	assert config.provider == "test"
+	assert config.model == "model"
+	assert config.api_key == "key"
+	assert config.base_url == "http://localhost"
