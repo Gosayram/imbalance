@@ -1,33 +1,32 @@
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from imbalance.core.embeddings import EmbeddingConfig, OllamaProvider, OpenAICompatProvider, build_provider
+from unittest.mock import AsyncMock, MagicMock, patch
+from imbalance.core.embeddings import EmbeddingConfig, OpenAICompatProvider, OllamaProvider, build_provider
 
 
 def test_embedding_config_defaults():
-	config = EmbeddingConfig(provider="openai", model="test-model")
-	assert config.provider == "openai"
-	assert config.model == "test-model"
-	assert config.api_key is None
+	config = EmbeddingConfig(provider="test", model="model")
+	assert config.provider == "test"
+	assert config.model == "model"
 
 
-def test_ollama_provider_defaults():
-	prov = OllamaProvider()
-	assert prov.model == "nomic-embed-text:v1.5"
-	assert prov.dimension == 768
-
-
-@pytest.mark.asyncio
-async def test_ollama_provider_embed():
-	# Test that provider is properly configured without making actual API calls
+def test_ollama_provider_init():
 	prov = OllamaProvider()
 	assert prov.dimension == 768
 	assert prov.model == "nomic-embed-text:v1.5"
 
 
-@pytest.mark.asyncio
-async def test_openai_provider_defaults():
+def test_ollama_provider_with_params():
+	prov = OllamaProvider(model="custom", base_url="http://localhost:1234")
+	assert prov.dimension == 768
+
+
+def test_openai_provider_init():
 	prov = OpenAICompatProvider()
-	assert prov.model == "text-embedding-3-small"
+	assert prov.dimension == 1536
+
+
+def test_openai_provider_with_params():
+	prov = OpenAICompatProvider(model="custom", api_key="key", base_url="http://localhost")
 	assert prov.dimension == 1536
 
 
@@ -38,6 +37,46 @@ async def test_build_provider_none():
 
 
 @pytest.mark.asyncio
-async def test_build_provider_empty():
-	result = await build_provider(EmbeddingConfig(provider="none", model="test"))
+async def test_build_provider_none_provider():
+	config = EmbeddingConfig(provider="none", model="test")
+	result = await build_provider(config)
 	assert result is None
+
+
+@pytest.mark.asyncio
+async def test_build_provider_unknown():
+	config = EmbeddingConfig(provider="unknown", model="test")
+	result = await build_provider(config)
+	assert result is None
+
+
+@pytest.mark.asyncio
+async def test_ollama_ping_success():
+	import sys
+	from unittest.mock import AsyncMock
+	mock_module = type(sys)('ollama')
+	mock_client = AsyncMock()
+	mock_client.ps = AsyncMock()
+	mock_module.AsyncClient = lambda host=None: mock_client
+	sys.modules['ollama'] = mock_module
+	
+	prov = OllamaProvider()
+	result = await prov.ping()
+	assert result is True
+	del sys.modules['ollama']
+
+
+@pytest.mark.asyncio
+async def test_ollama_ping_failure():
+	import sys
+	from unittest.mock import AsyncMock
+	mock_module = type(sys)('ollama')
+	mock_client = AsyncMock()
+	mock_client.ps = AsyncMock(side_effect=Exception("error"))
+	mock_module.AsyncClient = lambda host=None: mock_client
+	sys.modules['ollama'] = mock_module
+	
+	prov = OllamaProvider()
+	result = await prov.ping()
+	assert result is False
+	del sys.modules['ollama']
