@@ -62,7 +62,7 @@ async def test_insert_symbols():
 @pytest.mark.asyncio
 async def test_count_symbols():
 	db = AsyncMock()
-	db.execute_fetchone = AsyncMock(return_value=[5])
+	db.execute_fetchall = AsyncMock(return_value=[{'cnt': 5}])
 	indexer = GraphIndexer(Path("."), db, "test_kb")
 	count = await indexer._count_symbols()
 	assert count == 5
@@ -71,7 +71,7 @@ async def test_count_symbols():
 @pytest.mark.asyncio
 async def test_count_symbols_empty():
 	db = AsyncMock()
-	db.execute_fetchone = AsyncMock(return_value=None)
+	db.execute_fetchall = AsyncMock(return_value=[])
 	indexer = GraphIndexer(Path("."), db, "test_kb")
 	count = await indexer._count_symbols()
 	assert count == 0

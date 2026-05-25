@@ -122,11 +122,11 @@ class GraphIndexer:
 		await self.db.commit()
 
 	async def _count_symbols(self) -> int:
-		row = await self.db.execute_fetchone(
-			'SELECT COUNT(*) FROM code_symbols WHERE kb_name = ?',
+		rows = await self.db.execute_fetchall(
+			'SELECT COUNT(*) AS cnt FROM code_symbols WHERE kb_name = ?',
 			(self.kb_name,),
 		)
-		return row[0] if row else 0
+		return rows[0]['cnt'] if rows else 0
 
 	async def _resolve_trigrams(self) -> None:
 		rows = await self.db.execute_fetchall(
