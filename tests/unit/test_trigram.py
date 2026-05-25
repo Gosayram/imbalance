@@ -105,3 +105,14 @@ def test_extract_trigrams_whitespace():
 	result = _extract_trigrams("hello world")
 	assert "hel" in result
 	assert "wor" in result
+
+
+@pytest.mark.asyncio
+async def test_build_trigram_index_large_batch():
+	mock_db = AsyncMock()
+	mock_db.executemany = AsyncMock()
+	mock_db.commit = AsyncMock()
+	# Create a large batch to trigger the batch insertion logic
+	symbol_ids = {f"symbol{i}": i for i in range(10000)}
+	result = await build_trigram_index(mock_db, symbol_ids)
+	assert result > 0

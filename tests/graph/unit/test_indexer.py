@@ -29,6 +29,29 @@ def test_parse_batch_returns_symbols():
 	assert isinstance(symbols, list)
 
 
+def test_parse_batch_with_file(tmp_path):
+	test_file = tmp_path / "test.py"
+	test_file.write_text("def hello():\n    pass\n")
+	symbols = _parse_batch([str(test_file)])
+	assert len(symbols) > 0
+
+
+def test_walk_files_skip_git(tmp_path):
+	git = tmp_path / ".git"
+	git.mkdir()
+	(git / "test.py").write_text("pass")
+	result = list(_walk_files(tmp_path))
+	assert len(result) == 0
+
+
+def test_walk_files_skip_node_modules(tmp_path):
+	nm = tmp_path / "node_modules"
+	nm.mkdir()
+	(nm / "test.js").write_text("pass")
+	result = list(_walk_files(tmp_path))
+	assert len(result) == 0
+
+
 def test_walk_files_multiple_files(tmp_path):
 	(tmp_path / "a.py").write_text("pass")
 	(tmp_path / "b.py").write_text("pass")
