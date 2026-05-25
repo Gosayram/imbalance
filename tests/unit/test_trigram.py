@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from imbalance.graph.trigram import _extract_trigrams, trigram_search, build_trigram_index
 
 
@@ -43,3 +43,54 @@ async def test_trigram_search_query_too_short():
 	mock_db = AsyncMock()
 	result = await trigram_search(mock_db, "x", "kb1")
 	assert result == []
+
+
+@pytest.mark.asyncio
+async def test_trigram_search_no_trigrams():
+	mock_db = AsyncMock()
+	result = await trigram_search(mock_db, "", "kb1")
+	assert result == []
+
+
+@pytest.mark.asyncio
+async def test_trigram_search_with_results():
+	mock_db = AsyncMock()
+	mock_db.execute_fetchall = AsyncMock(return_value=[
+		{'id': 1, 'name': 'func', 'kind': 'function', 'file_path': 'test.py', 'line': 10}
+	])
+	result = await trigram_search(mock_db, "fun", "kb1")
+	assert len(result) == 1
+	assert result[0]['name'] == 'func'
+
+
+@pytest.mark.asyncio
+async def test_trigram_search_limit():
+	mock_db = AsyncMock()
+	mock_db.execute_fetchall = AsyncMock(return_value=[])
+	result = await trigram_search(mock_db, "test", "kb1", limit=5)
+	assert result == []
+
+
+@pytest.mark.asyncio
+async def test_build_trigram_index_empty():
+	mock_db = AsyncMock()
+	result = await build_trigram_index(mock_db, {})
+	assert result == 0
+
+
+@pytest.mark.asyncio
+async def test_build_trigram_index_single():
+	mock_db = AsyncMock()
+	mock_db.executemany = AsyncMock()
+	mock_db.commit = AsyncMock()
+	result = await build_trigram_index(mock_db, {'function': 1})
+	assert result == 6
+
+
+@pytest.mark.asyncio
+async def test_build_trigram_index_multiple():
+	mock_db = AsyncMock()
+	mock_db.executemany = AsyncMock()
+	mock_db.commit = AsyncMock()
+	result = await build_trigram_index(mock_db, {'hello': 1, 'world': 2})
+	assert result > 0

@@ -57,3 +57,62 @@ async def test_daemon_shutdown_with_in_flight():
 	daemon._in_flight.add(asyncio.create_task(asyncio.sleep(0.01)))
 	await daemon.shutdown()
 	assert daemon._shutting_down is True
+
+
+@pytest.mark.asyncio
+async def test_daemon_startup_success(tmp_path):
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=tmp_path, config_path=tmp_path / "test.toml", config=config, data_dir=tmp_path)
+	daemon = ImbalanceDaemon(project)
+	mock_db = AsyncMock()
+	with patch("imbalance.server.open_db", return_value=mock_db):
+		with patch("imbalance.server.run_migrations"):
+			with patch("imbalance.server.SessionManager") as mock_sm:
+				mock_sm.return_value.recover_pending = AsyncMock(return_value=(0, 0))
+				with patch("imbalance.server.ModelRouter"):
+					with patch("imbalance.server.ImbalanceDaemon._process_flush_queue"):
+						with patch("imbalance.server.ImbalanceDaemon._check_notifications"):
+							with patch.object(daemon, '_router', None):
+								await daemon.startup()
+
+
+@pytest.mark.asyncio
+async def test_process_flush_queue_no_db():
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	await daemon._process_flush_queue()
+
+
+@pytest.mark.asyncio
+async def test_process_flush_queue_no_router():
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	daemon.db = AsyncMock()
+	daemon._router = None
+	await daemon._process_flush_queue()
+
+
+@pytest.mark.asyncio
+async def test_check_notifications_no_db():
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	await daemon._check_notifications()
+
+
+@pytest.mark.asyncio
+async def test_handle_signal():
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	daemon._server = MagicMock()
+	import signal
+	await daemon._handle_signal(signal.SIGTERM)
+	assert daemon._server.should_exit is True

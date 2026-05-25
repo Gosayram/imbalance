@@ -43,3 +43,16 @@ def test_rrf_merge_deduplicates():
 	slugs = [c.slug for c in result]
 	assert len(slugs) == 2
 	assert set(slugs) == {'a', 'b'}
+
+
+def test_rrf_merge_ordering():
+	fts = [_chunk('c', 'decisions', 0.1), _chunk('a', 'decisions', 0.9), _chunk('b', 'context', 0.5)]
+	vec = [_chunk('c', 'decisions', 0.2)]
+	result = rrf_merge(fts, vec)
+	assert len(result) == 3
+
+
+def test_rrf_merge_single_source():
+	fts = [_chunk('a', 'decisions'), _chunk('b', 'context'), _chunk('c', 'stack')]
+	result = rrf_merge(fts, [])
+	assert len(result) == 3

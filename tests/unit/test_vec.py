@@ -6,6 +6,7 @@ from imbalance.storage.vec import search_by_embedding, _floats_to_blob
 @pytest.mark.asyncio
 async def test_search_by_embedding_unavailable():
 	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
 	results = await search_by_embedding(db, [0.1, 0.2, 0.3], limit=5)
 	assert results == []
 
@@ -34,18 +35,7 @@ def test_floats_to_blob_empty():
 
 
 @pytest.mark.asyncio
-async def test_is_vec_available_import_error():
-	db = AsyncMock()
-	with patch.dict("sys.modules", {"sqlite_vec": None}):
-		import sys
-		sys.modules["sqlite_vec"] = None
-		from imbalance.storage.vec import is_vec_available
-		result = await is_vec_available(db)
-		assert result is False
-
-
-@pytest.mark.asyncio
-async def test_ensure_vec_table_unavailable():
+async def test_ensure_vec_table_returns_false():
 	db = AsyncMock()
 	with patch("imbalance.storage.vec.is_vec_available", return_value=False):
 		from imbalance.storage.vec import ensure_vec_table

@@ -27,3 +27,60 @@ def test_walk_files_skips_dirs(tmp_path):
 def test_parse_batch_returns_symbols():
 	symbols = _parse_batch([])
 	assert isinstance(symbols, list)
+
+
+def test_walk_files_multiple_files(tmp_path):
+	(tmp_path / "a.py").write_text("pass")
+	(tmp_path / "b.py").write_text("pass")
+	result = list(_walk_files(tmp_path))
+	assert len(result) == 2
+
+
+def test_walk_files_skip_hidden(tmp_path):
+	hidden = tmp_path / ".git"
+	hidden.mkdir()
+	(hidden / "test.py").write_text("pass")
+	result = list(_walk_files(tmp_path))
+	assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_graph_indexer_init():
+	db = AsyncMock()
+	indexer = GraphIndexer(Path("."), db, "test_kb")
+	assert indexer.kb_name == "test_kb"
+
+
+@pytest.mark.asyncio
+async def test_insert_symbols():
+	db = AsyncMock()
+	indexer = GraphIndexer(Path("."), db, "test_kb")
+	await indexer._insert_symbols([])
+	db.executemany.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_count_symbols():
+	db = AsyncMock()
+	db.execute_fetchone = AsyncMock(return_value=[5])
+	indexer = GraphIndexer(Path("."), db, "test_kb")
+	count = await indexer._count_symbols()
+	assert count == 5
+
+
+@pytest.mark.asyncio
+async def test_count_symbols_empty():
+	db = AsyncMock()
+	db.execute_fetchone = AsyncMock(return_value=None)
+	indexer = GraphIndexer(Path("."), db, "test_kb")
+	count = await indexer._count_symbols()
+	assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_resolve_trigrams():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[{'id': 1, 'name': 'test'}])
+	indexer = GraphIndexer(Path("."), db, "test_kb")
+	await indexer._resolve_trigrams()
+	db.execute_fetchall.assert_called()
