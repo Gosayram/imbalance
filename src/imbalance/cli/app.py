@@ -25,6 +25,7 @@ daemon_app = typer.Typer(help='Daemon commands.')
 embeddings_app = typer.Typer(help='Embedding tier management.')
 kb_app = typer.Typer(help='Knowledge base compaction commands.')
 wiki_app = typer.Typer(help='Wiki section commands.')
+debug_app = typer.Typer(help='Debug and diagnostics commands.')
 app.add_typer(project_app, name='project')
 app.add_typer(session_app, name='session')
 app.add_typer(queue_app, name='queue')
@@ -32,6 +33,7 @@ app.add_typer(daemon_app, name='daemon')
 app.add_typer(embeddings_app, name='embeddings')
 app.add_typer(kb_app, name='kb')
 app.add_typer(wiki_app, name='wiki')
+app.add_typer(debug_app, name='debug')
 
 
 def _get_openrouter_key() -> str | None:
@@ -1585,6 +1587,151 @@ def eval_compare(
 ) -> None:
 	"""Compare two retrieval configs."""
 	typer.echo('A/B comparison coming soon')
+
+
+# ── Debug commands ──────────────────────────────────────────────────────
+
+async def _debug_db_shell() -> None:
+	"""Open SQLite shell for current project database."""
+	import subprocess
+	project = load_project()
+	db_path = project.db_path
+	if not db_path.exists():
+		typer.echo(f'Database not found: {db_path}')
+		raise typer.Exit(1)
+	typer.echo(f'Opening sqlite3 on {db_path}')
+	subprocess.run(['sqlite3', str(db_path)], check=False)
+
+
+@debug_app.command('db-shell')
+def debug_db_shell() -> None:
+	"""Open SQLite shell for current project database."""
+	asyncio.run(_debug_db_shell())
+
+
+async def _debug_db_dump() -> None:
+	"""Dump all tables from the project database."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		tables = await db.execute_fetchall(
+			"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+		)
+		for row in tables:
+			table_name = row['name']
+			typer.echo(f'\n=== {table_name} ===')
+			rows = await db.execute_fetchall(f'SELECT * FROM {table_name} LIMIT 20')
+			if rows:
+				for r in rows:
+					typer.echo(dict(r))
+			else:
+				typer.echo('(empty)')
+	finally:
+		await db.close()
+
+
+@debug_app.command('db-dump')
+def debug_db_dump() -> None:
+	"""Dump all tables from the project database."""
+	asyncio.run(_debug_db_dump())
+
+
+async def _debug_db_query(sql: str) -> None:
+	"""Execute arbitrary SQL query."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(sql)
+		for r in rows:
+			typer.echo(dict(r))
+	finally:
+		await db.close()
+
+
+@debug_app.command('db-query')
+def debug_db_query(
+	sql: Annotated[str, typer.Argument(help='SQL query to execute')],
+) -> None:
+	"""Execute arbitrary SQL query."""
+	asyncio.run(_debug_db_query(sql))
+
+
+async def _debug_queue_show() -> None:
+	"""Show all entries in the flush queue."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT id, session_id, payload, attempts, next_retry, error FROM flush_queue ORDER BY id'
+		)
+		if not rows:
+			typer.echo('Queue is empty')
+			return
+		for r in rows:
+			typer.echo(f'  [{r["id"]}] session={r["session_id"]} attempts={r["attempts"]} next={r["next_retry"]}')
+			if r['error']:
+				typer.echo(f'    error: {r["error"]}')
+	finally:
+		await db.close()
+
+
+@debug_app.command('queue-show')
+def debug_queue_show() -> None:
+	"""Show all entries in the flush queue."""
+	asyncio.run(_debug_queue_show())
+
+
+async def _debug_cb_status() -> None:
+	"""Show circuit breaker status."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		router = ModelRouter(
+			openrouter_key=_get_openrouter_key(),
+			anthropic_key=os.environ.get('ANTHROPIC_API_KEY'),
+		)
+		typer.echo('Circuit Breakers:')
+		for name, cb in router._breakers.items():
+			typer.echo(f'  {name}: {cb.state.value} (failures={cb.failures})')
+	finally:
+		await db.close()
+
+
+@debug_app.command('cb-status')
+def debug_cb_status() -> None:
+	"""Show circuit breaker status."""
+	asyncio.run(_debug_cb_status())
+
+
+async def _debug_sessions_list(status: str | None = None) -> None:
+	"""List sessions with optional status filter."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		if status:
+			rows = await db.execute_fetchall(
+				'SELECT id, kb_name, machine_id, status, started_at, flushed_at FROM sessions WHERE status=? ORDER BY started_at DESC',
+				(status,),
+			)
+		else:
+			rows = await db.execute_fetchall(
+				'SELECT id, kb_name, machine_id, status, started_at, flushed_at FROM sessions ORDER BY started_at DESC'
+			)
+		if not rows:
+			typer.echo('No sessions found')
+			return
+		for r in rows:
+			typer.echo(f'  {r["id"][:8]}  status={r["status"]}  machine={r["machine_id"]}  started={r["started_at"]}')
+	finally:
+		await db.close()
+
+
+@debug_app.command('sessions-list')
+def debug_sessions_list(
+	status: Annotated[str | None, typer.Option('--status', help='Filter by status')] = None,
+) -> None:
+	"""List sessions."""
+	asyncio.run(_debug_sessions_list(status))
 
 
 if __name__ == '__main__':

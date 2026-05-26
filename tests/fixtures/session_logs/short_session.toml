@@ -1,0 +1,12 @@
+[summary]
+value = "Implemented JWT refresh token rotation"
+
+[decisions]
+value = ["Use pessimistic lock on refresh_tokens table", "Store tokens in httpOnly cookies"]
+
+[next_steps]
+value = ["Write load tests for concurrent refresh", "Add monitoring for token rotation failures"]
+
+[session]
+id = "s-short-001"
+started_at = "2026-05-27T10:00:00Z"

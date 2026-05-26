@@ -167,6 +167,20 @@ docstring-code-format = true
 docstring-code-line-length = 20
 exclude = ["*.pyi"]
 
+[tool.coverage.run]
+source = ["src/imbalance"]
+omit = ["*/tests/*", "*/debug/*"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
 # Dev dependencies are defined in [dependency-groups].dev per PEP 735
 [dependency-groups]
 dev = [
