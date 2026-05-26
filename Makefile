@@ -105,18 +105,7 @@ check-file-size: ## Файлы graph/ ≤ 300 строк
 	exit $$fail
 
 check-slots: ## Проверка что все dataclasses в graph/ имеют slots=True
-	@$(UV) run python -c "import ast, sys; from pathlib import Path; found = []; \
-for f in Path('src/imbalance/graph').glob('*.py'): \
-	t = ast.parse(f.read_text()); \
-	for n in ast.walk(t): \
-		if not isinstance(n, ast.ClassDef): continue; \
-		for d in n.decorator_list: \
-			if isinstance(d, ast.Call) and hasattr(d.func, 'id') and d.func.id == 'dataclass': \
-				k = {x.arg: x.value for x in d.keywords}; \
-				s = k.get('slots'); \
-				if not (s and isinstance(s, ast.Constant) and s.value): found.append(f'{f}:{n.lineno} class {n.name}'); \
-if found: [print(x) for x in found]; sys.exit(1 if found else 0); \
-print('All graph dataclasses have slots=True ✓')"
+	@$(UV) run python scripts/check_slots.py
 
 test-graph: venv ## Unit + integration тесты graph-модуля
 	$(PYTHON) -m pytest tests/graph/unit tests/graph/integration -v --tb=short -x
@@ -126,5 +115,41 @@ test-graph-memory: venv ## Memory тесты (медленные)
 
 test-graph-leaks: venv ## Только leak-тесты с tracemalloc
 	CHECK_LEAKS=1 $(PYTHON) -m pytest tests/graph/memory/test_no_leaks.py -v -s
+
+bench-graph: venv ## Бенчмарки парсеров и индексации
+	$(PYTHON) -m pytest tests/graph/benchmarks/ \
+		--benchmark-only \
+		--benchmark-sort=mean \
+		--benchmark-columns=mean,stddev,min,max,rounds \
+		-v
+
+bench-graph-save: venv ## Сохранить результаты как baseline для сравнения
+	$(PYTHON) -m pytest tests/graph/benchmarks/ \
+		--benchmark-only \
+		--benchmark-save=baseline \
+		-v
+
+bench-graph-compare: venv ## Сравнить текущие результаты с baseline
+	$(PYTHON) -m pytest tests/graph/benchmarks/ \
+		--benchmark-only \
+		--benchmark-compare=baseline \
+		--benchmark-compare-fail=mean:10% \
+		-v
+
+bench-parsers: venv ## Только бенчмарки парсеров (быстро)
+	$(PYTHON) -m pytest tests/graph/benchmarks/bench_parsers.py \
+		--benchmark-only -v
+
+bench-search: venv ## Бенчмарк trigram vs LIKE
+	$(PYTHON) -m pytest tests/graph/benchmarks/bench_indexer.py::bench_trigram_search \
+		-v -s
+
+profile-graph-memory: venv ## Детальный memory profile через tracemalloc
+	$(PYTHON) -c "import asyncio, tracemalloc, tempfile, aiosqlite; from pathlib import Path; from tests.graph.conftest import MemoryTracker; print('Use existing fixtures for profiling')"
+
+profile-graph-cpu: venv ## CPU profile через cProfile
+	$(PYTHON) -m cProfile -s cumulative \
+		-m pytest tests/graph/benchmarks/bench_parsers.py \
+		--benchmark-disable -q 2>&1 | head -30
 
 graph-check: check-slots check-file-size lint test-graph ## Полная проверка graph

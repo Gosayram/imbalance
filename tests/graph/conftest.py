@@ -9,26 +9,9 @@ from unittest.mock import AsyncMock
 
 @pytest.fixture
 async def graph_db(tmp_path):
-	db = await aiosqlite.connect(tmp_path / 'test_graph.db')
-	db.row_factory = aiosqlite.Row
-	await db.executescript("""
-		CREATE TABLE IF NOT EXISTS code_symbols (
-			id INTEGER PRIMARY KEY,
-			kb_name TEXT NOT NULL,
-			name TEXT NOT NULL,
-			kind TEXT NOT NULL,
-			file_path TEXT NOT NULL,
-			line INTEGER NOT NULL,
-			end_line INTEGER NOT NULL,
-			signature TEXT NOT NULL,
-			language TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS trigram_index (
-			trigram TEXT NOT NULL,
-			rowid INTEGER NOT NULL
-		);
-	""")
-	await db.commit()
+	from imbalance.storage.db import open_db, run_migrations
+	db = await open_db(tmp_path / 'test_graph.db')
+	await run_migrations(db)
 	yield db
 	await db.close()
 

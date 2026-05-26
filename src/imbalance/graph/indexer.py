@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import time
+import tracemalloc
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -54,49 +55,59 @@ class GraphIndexer:
 	async def index_full(self) -> IndexStats:
 		start_time = time.perf_counter()
 
-		files = list(_walk_files(self.project_path))
-		n_workers = min(os.cpu_count() or 4, 8)
-		batch_size = max(10, len(files) // n_workers) if files else 10
+		started_tracemalloc = False
+		if not tracemalloc.is_tracing():
+			tracemalloc.start()
+			started_tracemalloc = True
 
-		all_symbols: list[Symbol] = []
-		loop = asyncio.get_event_loop()
+		try:
+			files = list(_walk_files(self.project_path))
+			n_workers = min(os.cpu_count() or 4, 8)
+			batch_size = max(10, len(files) // n_workers) if files else 10
 
-		with ProcessPoolExecutor(
-			max_workers=n_workers,
-			max_tasks_per_child=200,
-		) as executor:
-			batches = [files[i : i + batch_size] for i in range(0, len(files), batch_size)]
+			all_symbols: list[Symbol] = []
+			loop = asyncio.get_event_loop()
 
-			for i in range(0, len(batches), 4):
-				chunk = batches[i : i + 4]
-				futures = [loop.run_in_executor(executor, _parse_batch, b) for b in chunk]
-				results = await asyncio.gather(*futures, return_exceptions=True)
+			with ProcessPoolExecutor(
+				max_workers=n_workers,
+				max_tasks_per_child=200,
+			) as executor:
+				batches = [files[i : i + batch_size] for i in range(0, len(files), batch_size)]
 
-				for result in results:
-					if isinstance(result, Exception):
-						logger.warning(f'Batch parse error: {result}')
-						continue
-					all_symbols.extend(result)
+				for i in range(0, len(batches), 4):
+					chunk = batches[i : i + 4]
+					futures = [loop.run_in_executor(executor, _parse_batch, b) for b in chunk]
+					results = await asyncio.gather(*futures, return_exceptions=True)
 
-				if len(all_symbols) >= 10_000:
-					await self._insert_symbols(all_symbols)
-					all_symbols.clear()
+					for result in results:
+						if isinstance(result, Exception):
+							logger.warning(f'Batch parse error: {result}')
+							continue
+						all_symbols.extend(result)
 
-		if all_symbols:
-			await self._insert_symbols(all_symbols)
-			all_symbols.clear()
+					if len(all_symbols) >= 10_000:
+						await self._insert_symbols(all_symbols)
+						all_symbols.clear()
 
-		await self._resolve_trigrams()
+			if all_symbols:
+				await self._insert_symbols(all_symbols)
+				all_symbols.clear()
 
-		elapsed_ms = (time.perf_counter() - start_time) * 1000
+			await self._resolve_trigrams()
 
-		return IndexStats(
-			files=len(files),
-			symbols=await self._count_symbols(),
-			edges=0,
-			duration_ms=elapsed_ms,
-			peak_rss_mb=0.0,
-		)
+			_, peak_bytes = tracemalloc.get_traced_memory()
+			elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+			return IndexStats(
+				files=len(files),
+				symbols=await self._count_symbols(),
+				edges=0,
+				duration_ms=elapsed_ms,
+				peak_rss_mb=peak_bytes / (1024 * 1024),
+			)
+		finally:
+			if started_tracemalloc:
+				tracemalloc.stop()
 
 	async def _insert_symbols(self, symbols: list[Symbol]) -> None:
 		await self.db.executemany(

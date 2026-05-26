@@ -46,10 +46,18 @@ packages = ["src/imbalance"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
 markers = [
     "unit: fast tests without external services",
     "integration: tests using real SQLite and mocked networks",
     "e2e: full workflow tests",
+    "slow: tests longer than 5 seconds",
+    "requires_ollama: tests requiring running Ollama",
+    "requires_network: tests requiring internet access",
 ]
 
 [tool.ruff]
@@ -101,6 +109,9 @@ select = [
     "SIM",
     "C4",
     "RUF",
+    "C90",
+    "N",
+    "PL",
 ]
 ignore = [
     "E501",
@@ -118,10 +129,27 @@ ignore = [
     "E111",
     "E114",
     "E117",
+    "N818",
+    "PLC0415",
+    "PLR2004",
+    "PLW0603",
+    "PLR0911",
+    "PLR0913",
+    "PLR0915",
+    "PLR0402",
+    "PLR1730",
 ]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pylint]
+max-args = 8
+max-returns = 8
+max-branches = 16
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
@@ -146,5 +174,7 @@ dev = [
     "mypy>=2.1,<3",
     "pytest>=9.0,<10",
     "pytest-asyncio>=1.3,<2",
+    "pytest-benchmark>=4.0,<5",
+    "psutil>=5.9,<6",
     "ruff>=0.15.14,<0.16",
 ]
