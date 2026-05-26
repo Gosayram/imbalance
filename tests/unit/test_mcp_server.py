@@ -77,3 +77,26 @@ def test_format_for_agent_cursor_many_lines():
 	lines = [f"line {i}" for i in range(15)]
 	result = format_for_agent(AgentType.CURSOR, "\n".join(lines))
 	assert "..." in result
+
+
+def test_format_for_agent_gemini():
+	result = format_for_agent(AgentType.GEMINI, "test content")
+	assert result == "test content"
+
+
+def test_format_for_agent_cursor_exactly_10_lines():
+	lines = [f"line {i}" for i in range(10)]
+	result = format_for_agent(AgentType.CURSOR, "\n".join(lines))
+	assert "..." not in result
+
+
+def test_format_for_agent_cursor_11_lines():
+	lines = [f"line {i}" for i in range(11)]
+	result = format_for_agent(AgentType.CURSOR, "\n".join(lines))
+	assert "..." in result
+
+
+def test_format_for_agent_codex_all_long_lines():
+	lines = [f"line {i}" * 100 for i in range(20)]
+	result = format_for_agent(AgentType.CODEX, "\n".join(lines))
+	assert result.count("<line>") >= 15

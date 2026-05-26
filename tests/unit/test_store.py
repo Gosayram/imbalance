@@ -174,3 +174,33 @@ async def test_store_vec_search_with_scope():
 	store = SQLiteStore(db, "test")
 	results = await store.vec_search([0.1, 0.2, 0.3], scope=["decisions"])
 	assert len(results) == 1
+
+
+@pytest.mark.asyncio
+async def test_store_upsert_section_no_row():
+	db = AsyncMock()
+	db.execute = AsyncMock(return_value=AsyncMock(lastrowid=1))
+	db.rollback = AsyncMock()
+	store = SQLiteStore(db, "test")
+	store._fetchone = AsyncMock(return_value=None)
+	with pytest.raises(RuntimeError):
+		await store.upsert_section(slug="test-slug", section="overview", content="content", token_count=10)
+
+
+@pytest.mark.asyncio
+async def test_store_mark_raw_memories_consumed():
+	db = AsyncMock()
+	db.execute = AsyncMock()
+	db.commit = AsyncMock()
+	store = SQLiteStore(db, "test")
+	await store.mark_raw_memories_consumed([1, 2, 3])
+
+
+@pytest.mark.asyncio
+async def test_store_upsert_memory_summary_error():
+	db = AsyncMock()
+	db.execute = AsyncMock(side_effect=Exception("db error"))
+	db.rollback = AsyncMock()
+	store = SQLiteStore(db, "test")
+	with pytest.raises(Exception):
+		await store.upsert_memory_summary("content", 5)

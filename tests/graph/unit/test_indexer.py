@@ -114,3 +114,20 @@ async def test_index_project_no_db():
 	indexer = GraphIndexer(Path("."), None, "test_kb")
 	with pytest.raises(Exception):
 		await indexer.index_project()
+
+
+def test_walk_files_permission_error(tmp_path):
+	# Mock scandir to raise PermissionError
+	with patch("imbalance.graph.indexer.os.scandir") as mock_scandir:
+		mock_scandir.side_effect = PermissionError("access denied")
+		result = list(_walk_files(tmp_path))
+		assert result == []
+
+
+@pytest.mark.asyncio
+async def test_index_full_empty(tmp_path):
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	indexer = GraphIndexer(tmp_path, db, "test_kb")
+	stats = await indexer.index_full()
+	assert stats.files == 0

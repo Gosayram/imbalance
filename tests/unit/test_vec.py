@@ -102,9 +102,54 @@ def test_floats_to_blob_many():
 	assert len(result) == 400
 
 
+def test_floats_to_blob_negative():
+	result = _floats_to_blob([-1.5, 0.0, 1.5])
+	assert len(result) == 12
+
+
+def test_floats_to_blob_large_values():
+	result = _floats_to_blob([1e10, -1e10, 0.0])
+	assert len(result) == 12
+
+
 @pytest.mark.asyncio
-async def test_ensure_vec_table_with_dimension():
+async def test_ensure_vec_table_no_dimension():
 	db = AsyncMock()
 	with patch("imbalance.storage.vec.is_vec_available", return_value=True):
-		result = await ensure_vec_table(db, dimension=1536)
+		with patch("imbalance.core.embeddings.OpenAICompatProvider") as mock_provider:
+			mock_provider.return_value.dimension = 1536
+			result = await ensure_vec_table(db, dimension=None)
+			assert result is True
+			mock_provider.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_is_vec_available_with_extension():
+	db = AsyncMock()
+	db.enable_load_extension = AsyncMock()
+	mock_sqlite_vec = MagicMock()
+	mock_sqlite_vec.load = MagicMock()
+	
+	import sys
+	original = sys.modules.get('sqlite_vec')
+	sys.modules['sqlite_vec'] = mock_sqlite_vec
+	try:
+		# We need to reimport to get the fresh module
+		import importlib
+		import imbalance.storage.vec as vec_module
+		importlib.reload(vec_module)
+		result = await vec_module.is_vec_available(db)
 		assert result is True
+	finally:
+		if original:
+			sys.modules['sqlite_vec'] = original
+		else:
+			del sys.modules['sqlite_vec']
+
+
+@pytest.mark.asyncio
+async def test_search_by_embedding_with_empty_rows():
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	results = await search_by_embedding(db, [0.1, 0.2, 0.3], limit=5)
+	assert results == []
