@@ -303,6 +303,40 @@ async def test_daemon_startup_with_recovered_sessions():
 
 
 @pytest.mark.asyncio
+async def test_check_notifications_no_last_flush():
+	from imbalance.core.project import Project, ProjectConfig, NotificationConfig
+	config = ProjectConfig(name="test", version="1", notifications=NotificationConfig(enabled=True, queue_size_threshold=10, kb_stale_days=7))
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	mock_db = AsyncMock()
+	mock_db.execute_fetchone = AsyncMock(side_effect=[
+		{'cnt': 5},
+		None  # No last_flush
+	])
+	daemon.db = mock_db
+	with patch("imbalance.core.notifications.check_kb_health", return_value=["dummy alert"]):
+		with patch("imbalance.core.notifications.notify_alerts"):
+			await daemon._check_notifications()
+
+
+@pytest.mark.asyncio
+async def test_check_notifications_invalid_date():
+	from imbalance.core.project import Project, ProjectConfig, NotificationConfig
+	config = ProjectConfig(name="test", version="1", notifications=NotificationConfig(enabled=True, queue_size_threshold=10, kb_stale_days=7))
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	mock_db = AsyncMock()
+	mock_db.execute_fetchone = AsyncMock(side_effect=[
+		{'cnt': 5},
+		{'last': 'invalid-date'}  # Invalid date format
+	])
+	daemon.db = mock_db
+	with patch("imbalance.core.notifications.check_kb_health", return_value=["dummy alert"]):
+		with patch("imbalance.core.notifications.notify_alerts"):
+			await daemon._check_notifications()
+
+
+@pytest.mark.asyncio
 async def test_process_flush_queue_exception():
 	from imbalance.core.project import Project, ProjectConfig
 	config = ProjectConfig(name="test", version="1")

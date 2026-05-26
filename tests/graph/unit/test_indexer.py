@@ -131,3 +131,11 @@ async def test_index_full_empty(tmp_path):
 	indexer = GraphIndexer(tmp_path, db, "test_kb")
 	stats = await indexer.index_full()
 	assert stats.files == 0
+
+
+def test_walk_files_deep_nested(tmp_path):
+	# Test line 30 - stack.append for non-skipped directories
+	(tmp_path / "subdir").mkdir()
+	(tmp_path / "subdir" / "a.py").write_text("pass")
+	result = list(_walk_files(tmp_path))
+	assert len(result) == 1

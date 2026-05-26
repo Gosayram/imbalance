@@ -3,10 +3,22 @@ import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 
 # Mock the mcp module before importing
+mock_types = MagicMock()
+mock_types.Tool = MagicMock()
+mock_types.ToolAnnotations = MagicMock()
+
+def make_text_content(type='', text=''):
+	mock = MagicMock()
+	mock.type = type
+	mock.text = text
+	return mock
+
+mock_types.TextContent = make_text_content
+
 sys.modules['mcp'] = MagicMock()
 sys.modules['mcp.server'] = MagicMock()
 sys.modules['mcp.server.stdio'] = MagicMock()
-sys.modules['mcp.types'] = MagicMock()
+sys.modules['mcp.types'] = mock_types
 sys.modules['mcp.server.models'] = MagicMock()
 sys.modules['mcp.server.notification'] = MagicMock()
 
@@ -100,3 +112,36 @@ def test_format_for_agent_codex_all_long_lines():
 	lines = [f"line {i}" * 100 for i in range(20)]
 	result = format_for_agent(AgentType.CODEX, "\n".join(lines))
 	assert result.count("<line>") >= 15
+
+
+@pytest.mark.asyncio
+async def test_get_status():
+	from imbalance.mcp.server import _get_status
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(side_effect=[
+		[{'cnt': 5}],
+		[{'cnt': 10}]
+	])
+	result = await _get_status(db, "test_kb")
+	assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_topics():
+	from imbalance.mcp.server import _list_topics
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[
+		{'section': 'decisions', 'slug': 'test-slug'},
+		{'section': 'context', 'slug': 'another'}
+	])
+	result = await _list_topics(db, "test_kb")
+	assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_topics_empty():
+	from imbalance.mcp.server import _list_topics
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(return_value=[])
+	result = await _list_topics(db, "test_kb")
+	assert len(result) == 1

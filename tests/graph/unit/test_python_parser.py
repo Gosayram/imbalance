@@ -141,3 +141,37 @@ def test_parses_imports(parser):
 	symbols = parser.parse(src, 'test.py')
 	# imports are not parsed as symbols, just verify no crash
 	assert isinstance(symbols, tuple)
+
+
+def test_compiled_pattern_parser_utf8_error():
+	parser = CompiledPatternParser()
+	# This should return empty tuple on decode error
+	src = b'\xff\xfe'  # Invalid UTF-8
+	symbols = parser.parse(src, 'test.py', 'python')
+	assert symbols == ()
+
+
+def test_get_patterns_javascript():
+	patterns = _get_patterns('javascript')
+	assert len(patterns) == 4
+
+
+def test_get_patterns_go():
+	patterns = _get_patterns('go')
+	assert len(patterns) == 3
+
+
+def test_file_parser_unknown_language(tmp_path):
+	test_file = tmp_path / "test.rust"
+	test_file.write_text("fn main() {}")
+	fp = FileParser()
+	symbols = fp.parse(str(test_file))
+	assert symbols == ()
+
+
+def test_get_patterns_python_cache_miss():
+	# Clear cache to force cache miss path
+	import imbalance.graph.parser as parser_module
+	parser_module._PATTERN_CACHE.pop('python', None)
+	patterns = _get_patterns('python')
+	assert len(patterns) == 3

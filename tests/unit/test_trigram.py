@@ -72,6 +72,14 @@ async def test_trigram_search_limit():
 
 
 @pytest.mark.asyncio
+async def test_trigram_search_query_two_chars():
+	# Query "ab" returns no trigrams (len < 3), but passes the len < 2 check
+	mock_db = AsyncMock()
+	result = await trigram_search(mock_db, "ab", "kb1")
+	assert result == []
+
+
+@pytest.mark.asyncio
 async def test_build_trigram_index_empty():
 	mock_db = AsyncMock()
 	result = await build_trigram_index(mock_db, {})
