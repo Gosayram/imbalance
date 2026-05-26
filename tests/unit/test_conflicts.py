@@ -63,3 +63,35 @@ async def test_get_conflicts_with_data(db):
 	await db.commit()
 	result = await get_conflicts(db, "kb1")
 	assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_detect_conflict_no_router(db):
+	await db.execute("INSERT INTO wiki_sections (slug, content, kb_name, section, archived) VALUES (?, ?, ?, ?, 0)",
+		("old_slug", "old content", "kb1", "decisions"))
+	await db.commit()
+	# No router provided but there are existing decisions - should return False
+	result = await detect_conflict(db, "kb1", "new_slug", "new content", router=None)
+	assert result.conflict is False
+
+
+@pytest.mark.asyncio
+async def test_detect_conflict_invalid_json(db):
+	await db.execute("INSERT INTO wiki_sections (slug, content, kb_name, section, archived) VALUES (?, ?, ?, ?, 0)",
+		("old_slug", "old content", "kb1", "decisions"))
+	await db.commit()
+	mock_router = MagicMock()
+	mock_router.complete = AsyncMock(return_value='invalid json response')
+	result = await detect_conflict(db, "kb1", "new_slug", "new content", router=mock_router)
+	assert result.conflict is False
+
+
+@pytest.mark.asyncio
+async def test_detect_conflict_router_error(db):
+	await db.execute("INSERT INTO wiki_sections (slug, content, kb_name, section, archived) VALUES (?, ?, ?, ?, 0)",
+		("old_slug", "old content", "kb1", "decisions"))
+	await db.commit()
+	mock_router = MagicMock()
+	mock_router.complete = AsyncMock(side_effect=Exception("LLM error"))
+	result = await detect_conflict(db, "kb1", "new_slug", "new content", router=mock_router)
+	assert result.conflict is False

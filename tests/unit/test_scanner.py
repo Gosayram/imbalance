@@ -83,3 +83,17 @@ def test_scan_directory_all_marker_types(tmp_path):
 	assert hits[2].section == 'issues'
 	assert hits[3].section == 'issues'
 	assert hits[4].section == 'notes'
+
+
+def test_scan_directory_custom_exts(tmp_path):
+	test_file = tmp_path / "test.rb"
+	test_file.write_text("# IMBALANCE:DECISION: ruby decision\n")
+	hits = scan_directory(tmp_path, exts={'.rb'})
+	assert len(hits) == 1
+
+
+def test_scan_directory_skips_missing_exts(tmp_path):
+	test_file = tmp_path / "test.txt"
+	test_file.write_text("# IMBALANCE:DECISION: should skip\n")
+	hits = scan_directory(tmp_path)
+	assert len(hits) == 0

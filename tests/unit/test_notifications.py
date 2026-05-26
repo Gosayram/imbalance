@@ -1,5 +1,6 @@
 import pytest
-from imbalance.core.notifications import check_kb_health, notify_alerts
+from unittest.mock import patch
+from imbalance.core.notifications import check_kb_health, notify_alerts, send_system_notification
 
 
 def test_check_kb_health_no_alerts():
@@ -66,3 +67,24 @@ def test_check_kb_health_multiple_alerts():
 def test_notify_alerts_empty():
 	result = notify_alerts([])
 	assert result == 0
+
+
+def test_send_notification_linux():
+	with patch("imbalance.core.notifications.platform.system", return_value="Linux"):
+		with patch("imbalance.core.notifications.subprocess.run") as mock_run:
+			result = send_system_notification("test", "message")
+			assert result == True
+			mock_run.assert_called()
+
+
+def test_send_notification_unsupported():
+	with patch("imbalance.core.notifications.platform.system", return_value="Windows"):
+		result = send_system_notification("test", "message")
+		assert result == False
+
+
+def test_send_notification_linux_error():
+	with patch("imbalance.core.notifications.platform.system", return_value="Linux"):
+		with patch("imbalance.core.notifications.subprocess.run", side_effect=FileNotFoundError()):
+			result = send_system_notification("test", "message")
+			assert result == False

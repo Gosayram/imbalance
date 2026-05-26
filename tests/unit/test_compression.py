@@ -18,3 +18,11 @@ def test_truncate_long_text():
 	text = " ".join(["word"] * 100)
 	result = _truncate(text, 10)
 	assert len(result.split()) == 10
+
+
+@pytest.mark.asyncio
+async def test_compress_context_fallback():
+	# This hits the ImportError path since llmlingua is not installed
+	text = "word " * 100
+	result = await compress_context(text, 50)
+	assert len(result.split()) <= 50

@@ -204,6 +204,129 @@ async def test_save_compaction_summary_with_content():
 	db.commit.assert_called()
 
 
+@pytest.mark.asyncio
+async def test_save_compaction_summary_with_findings():
+	from imbalance.mcp.server import _save_compaction_summary
+	db = AsyncMock()
+	db.execute = AsyncMock()
+	db.commit = AsyncMock()
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	await _save_compaction_summary(db, project, {
+		'session_id': 'xyz789',
+		'summary': 'sum',
+		'findings': ['f1', 'f2'],
+		'next_steps': ['n1', 'n2'],
+	})
+	db.commit.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_save_compaction_summary_empty():
+	from imbalance.mcp.server import _save_compaction_summary
+	db = AsyncMock()
+	db.execute = AsyncMock()
+	db.commit = AsyncMock()
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	await _save_compaction_summary(db, project, {
+		'session_id': 'only-session',
+	})
+	db.commit.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_get_status_empty():
+	from imbalance.mcp.server import _get_status
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(side_effect=[
+		[],
+		[],
+		[],
+	])
+	result = await _get_status(db, "test_kb")
+	assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_status_partial():
+	from imbalance.mcp.server import _get_status
+	db = AsyncMock()
+	db.execute_fetchall = AsyncMock(side_effect=[
+		[],
+		[{'cnt': 10}],
+		[],
+	])
+	result = await _get_status(db, "test_kb")
+	assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_context_with_all_params():
+	from imbalance.mcp.server import _get_context, AgentType
+	store = AsyncMock()
+	pack = MagicMock()
+	pack.render_markdown = MagicMock(return_value="content")
+	with patch("imbalance.mcp.server.QueryEngine") as mock_qe:
+		mock_qe.return_value.get_context_pack = AsyncMock(return_value=pack)
+		result = await _get_context(store, {
+			'query': 'test query',
+			'budget_tokens': 1000,
+			'scope': ['section1', 'section2'],
+			'session_id': 'session-123',
+		}, AgentType.CURSOR)
+		assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_context_default_agent():
+	from imbalance.mcp.server import _get_context
+	store = AsyncMock()
+	pack = MagicMock()
+	pack.render_markdown = MagicMock(return_value="content")
+	with patch("imbalance.mcp.server.QueryEngine") as mock_qe:
+		mock_qe.return_value.get_context_pack = AsyncMock(return_value=pack)
+		result = await _get_context(store, {'query': 'test'})
+		assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_save_fact_variations():
+	from imbalance.mcp.server import _save_fact
+	store = AsyncMock()
+	result = MagicMock()
+	result.slug = "test-slug"
+	result.token_count = 50
+	with patch("imbalance.mcp.server.WriteEngine") as mock_we:
+		mock_we.return_value.save_fact = AsyncMock(return_value=result)
+		# Test with all params
+		res = await _save_fact(store, {
+			'content': 'test',
+			'section': 'decisions',
+			'slug': 'custom-slug',
+			'tags': ['tag1', 'tag2'],
+			'session_id': 'sess-123',
+		})
+		assert len(res) == 1
+
+
+@pytest.mark.asyncio
+async def test_report_context_usage_zero_total():
+	from imbalance.mcp.server import _report_context_usage
+	# Test with zero total tokens (edge case)
+	result = await _report_context_usage({'used_tokens': 0, 'total_tokens': 0, 'model': 'test'})
+	assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_report_context_usage_exceeded():
+	from imbalance.mcp.server import _report_context_usage
+	result = await _report_context_usage({'used_tokens': 15000, 'total_tokens': 10000})
+	assert len(result) == 1
+
+
 
 
 
