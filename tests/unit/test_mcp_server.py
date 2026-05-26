@@ -1,5 +1,6 @@
 import pytest
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 
 # Mock the mcp module before importing
@@ -7,13 +8,24 @@ mock_types = MagicMock()
 mock_types.Tool = MagicMock()
 mock_types.ToolAnnotations = MagicMock()
 
-def make_text_content(type='', text=''):
+def make_text_content(**kwargs):
 	mock = MagicMock()
-	mock.type = type
-	mock.text = text
+	mock.type = kwargs.get('type', 'text')
+	mock.text = kwargs.get('text', '')
 	return mock
 
-mock_types.TextContent = make_text_content
+def make_resource(**kwargs):
+	mock = MagicMock()
+	mock.uri = kwargs.get('uri', '')
+	mock.name = kwargs.get('name', '')
+	mock.description = kwargs.get('description', '')
+	mock.mimeType = kwargs.get('mimeType', '')
+	return mock
+
+mock_types.TextContent = MagicMock(side_effect=make_text_content)
+mock_types.ImageContent = MagicMock()
+mock_types.EmbeddedResource = MagicMock()
+mock_types.Resource = MagicMock(side_effect=make_resource)
 
 sys.modules['mcp'] = MagicMock()
 sys.modules['mcp.server'] = MagicMock()
@@ -145,3 +157,54 @@ async def test_list_topics_empty():
 	db.execute_fetchall = AsyncMock(return_value=[])
 	result = await _list_topics(db, "test_kb")
 	assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_resume_session_missing_session_id():
+	from imbalance.mcp.server import _resume_session
+	db = AsyncMock()
+	db.execute = AsyncMock()
+	db.commit = AsyncMock()
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	# Test that the function raises when session_id is missing
+	try:
+		await _resume_session(db, project, {})
+		assert False, "Should have raised ValueError"
+	except ValueError as e:
+		assert "session_id required" in str(e)
+
+
+@pytest.mark.asyncio
+async def test_save_compaction_summary_missing_session_id():
+	from imbalance.mcp.server import _save_compaction_summary
+	db = AsyncMock()
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	await _save_compaction_summary(db, project, {'session_id': 'test-id'})
+	db.commit.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_save_compaction_summary_with_content():
+	from imbalance.mcp.server import _save_compaction_summary
+	db = AsyncMock()
+	db.execute = AsyncMock()
+	db.commit = AsyncMock()
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	await _save_compaction_summary(db, project, {
+		'session_id': 'abc123',
+		'summary': 'test summary',
+		'decisions': ['dec1', 'dec2'],
+	})
+	db.commit.assert_called()
+
+
+
+
+
+
