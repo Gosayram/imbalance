@@ -337,6 +337,57 @@ async def test_check_notifications_invalid_date():
 
 
 @pytest.mark.asyncio
+async def test_run_daemon_success():
+	# Test via mocking the internals at function level
+	import imbalance.server as server_module
+	original_load = server_module.load_project
+	original_daemon = server_module.ImbalanceDaemon
+	
+	server_module.load_project = MagicMock()
+	server_module.load_project.return_value = MagicMock()
+	
+	mock_instance = MagicMock()
+	mock_instance.startup = AsyncMock()
+	mock_instance.shutdown = AsyncMock()
+	mock_instance._server = None
+	mock_instance.register_signal_handlers = MagicMock()
+	server_module.ImbalanceDaemon = MagicMock(return_value=mock_instance)
+	
+	with patch("uvicorn.Server") as mock_server_cls:
+		mock_server = MagicMock()
+		mock_server.serve = AsyncMock()
+		mock_server_cls.return_value = mock_server
+		await server_module.run_daemon(port=9999)
+		mock_server.serve.assert_called()
+	
+	server_module.load_project = original_load
+	server_module.ImbalanceDaemon = original_daemon
+
+
+@pytest.mark.asyncio
+async def test_run_daemon_startup_error():
+	import imbalance.server as server_module
+	original_load = server_module.load_project
+	original_daemon = server_module.ImbalanceDaemon
+	
+	server_module.load_project = MagicMock()
+	server_module.load_project.return_value = MagicMock()
+	
+	mock_instance = MagicMock()
+	mock_instance.startup = AsyncMock(side_effect=Exception("startup failed"))
+	mock_instance.shutdown = AsyncMock()
+	mock_instance.register_signal_handlers = MagicMock()
+	server_module.ImbalanceDaemon = MagicMock(return_value=mock_instance)
+	
+	with patch("uvicorn.Server"):
+		with pytest.raises(Exception, match="startup failed"):
+			await server_module.run_daemon(port=9999)
+	
+	server_module.load_project = original_load
+	server_module.ImbalanceDaemon = original_daemon
+
+
+@pytest.mark.asyncio
 async def test_process_flush_queue_exception():
 	from imbalance.core.project import Project, ProjectConfig
 	config = ProjectConfig(name="test", version="1")
@@ -391,3 +442,26 @@ async def test_process_flush_queue_without_session_manager():
 		with patch("imbalance.server.FlushPayload") as mock_payload:
 			mock_payload.from_json = MagicMock(return_value=MagicMock())
 			await daemon._process_flush_queue()
+
+
+@pytest.mark.asyncio
+async def test_process_flush_queue_break_on_no_router():
+	# Test line 72 - break when router is None but items exist
+	from imbalance.core.project import Project, ProjectConfig
+	config = ProjectConfig(name="test", version="1")
+	project = Project(root=Path("/tmp"), config_path=Path("/tmp/test.toml"), config=config, data_dir=Path("/tmp"))
+	daemon = ImbalanceDaemon(project)
+	daemon.db = AsyncMock()
+	daemon._router = None  # No router - should cause break on line 72
+
+	mock_item = MagicMock()
+	mock_item.id = 1
+	mock_item.session_id = "test-session"
+	mock_item.payload = b'{"summary": "test", "decisions": [], "next_steps": []}'
+	mock_item.attempts = 0
+
+	with patch("imbalance.server.FlushQueue") as mock_queue_cls:
+		mock_queue = AsyncMock()
+		mock_queue.due = AsyncMock(return_value=[mock_item])
+		mock_queue_cls.return_value = mock_queue
+		await daemon._process_flush_queue()
