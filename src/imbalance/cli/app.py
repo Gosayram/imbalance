@@ -1701,6 +1701,42 @@ async def _import_kb(path: str, merge: bool) -> None:
 		await db.close()
 
 
+@app.command('batch-import')
+def batch_import(
+	path: Annotated[str, typer.Argument(help='TOML file to import')],
+	batch_size: Annotated[int, typer.Option('--batch-size', help='Batch size')] = 100,
+) -> None:
+	"""Batch import sections from TOML file."""
+	asyncio.run(_batch_import(path, batch_size))
+
+
+async def _batch_import(path: str, batch_size: int) -> None:
+	import tomllib
+	from pathlib import Path
+
+	from imbalance.core.batch import batch_upsert_sections
+
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		raw = tomllib.loads(Path(path).read_text(encoding='utf-8'))
+		sections = raw.get('section', [])
+		if not sections:
+			typer.echo('No sections found in file')
+			return
+
+		result = await batch_upsert_sections(
+			db, project.name, sections, batch_size=batch_size
+		)
+		typer.echo(f'Batch import complete: {result.success}/{result.total} succeeded')
+		if result.failed > 0:
+			typer.echo(f'Failed: {result.failed}')
+			for error in result.errors[:5]:
+				typer.echo(f'  - {error}')
+	finally:
+		await db.close()
+
+
 @app.command('consolidate')
 def consolidate_memories() -> None:
 	"""Consolidate raw memories into project summary via LLM."""
