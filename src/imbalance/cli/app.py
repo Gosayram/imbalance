@@ -112,8 +112,9 @@ def search(
 	query: Annotated[str, typer.Argument()],
 	budget: Annotated[int, typer.Option('--budget')] = 2000,
 	scope: Annotated[list[str] | None, typer.Option('--scope')] = None,
+	format: Annotated[str, typer.Option('--format', help='text|json')] = 'text',
 ) -> None:
-	asyncio.run(_search(query=query, budget=budget, scope=scope))
+	asyncio.run(_search(query=query, budget=budget, scope=scope, format=format))
 
 
 @session_app.command('start')
@@ -158,6 +159,64 @@ def session_flush(
 			next_steps=next_step or [],
 		)
 	)
+
+
+async def _handoff(session_id: str | None, format: str) -> None:
+	"""Render handoff brief for a session."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		if session_id:
+			rows = await db.execute_fetchall(
+				'SELECT * FROM sessions WHERE id=? OR id LIKE ?',
+				(session_id, f'{session_id}%'),
+			)
+		else:
+			rows = await db.execute_fetchall(
+				"SELECT * FROM sessions WHERE status='active' ORDER BY started_at DESC LIMIT 1"
+			)
+
+		if not rows:
+			typer.echo('No session found')
+			raise typer.Exit(code=1)
+
+		session = dict(rows[0])
+		sid = session['id']
+
+		# Get recent facts from this session
+		facts = await db.execute_fetchall(
+			'SELECT slug, section, content FROM wiki_sections WHERE kb_name=? ORDER BY updated_at DESC LIMIT 10',
+			(project.name,),
+		)
+
+		if format == 'json':
+			import json
+			data = {
+				'session_id': sid,
+				'status': session.get('status', 'unknown'),
+				'started_at': session.get('started_at', ''),
+				'recent_facts': [{'slug': f['slug'], 'section': f['section']} for f in facts],
+			}
+			typer.echo(json.dumps(data, indent=2))
+		else:
+			typer.echo(f'# Handoff: {project.name}')
+			typer.echo(f'Session: {sid[:8]} ({session.get("status", "unknown")})')
+			typer.echo(f'Started: {session.get("started_at", "unknown")}')
+			typer.echo()
+			typer.echo('## Recent KB updates:')
+			for f in facts:
+				typer.echo(f'  [{f["section"]}] {f["slug"]}')
+	finally:
+		await db.close()
+
+
+@app.command('handoff')
+def handoff(
+	session_id: Annotated[str | None, typer.Option('--session', help='Session ID')] = None,
+	format: Annotated[str, typer.Option('--format', help='text|json')] = 'text',
+) -> None:
+	"""Render handoff brief for a session."""
+	asyncio.run(_handoff(session_id, format))
 
 
 @queue_app.command('recover')
@@ -368,11 +427,25 @@ async def _doctor() -> None:
 	queue_count = await FlushQueue(db).count()
 	sessions = await _session_manager(db, project).list()
 	await db.close()
+
 	typer.echo(f'config: {config}')
 	typer.echo(f'db: {project.db_path}')
 	typer.echo(f'integrity: {check}')
 	typer.echo(f'sessions: {len(sessions)}')
 	typer.echo(f'pending_queue: {queue_count}')
+
+	# Check provider status
+	router = ModelRouter(
+		openrouter_key=_get_openrouter_key(),
+		anthropic_key=os.environ.get('ANTHROPIC_API_KEY'),
+	)
+	provider_status = 'configured' if (router.openrouter_key or router.anthropic_key) else 'no API keys'
+	typer.echo(f'providers: {provider_status}')
+
+	# Check last checkpoint
+	if sessions:
+		last_session = sessions[0]
+		typer.echo(f'last_session: {last_session.id[:8]} ({last_session.status})')
 
 
 async def _save_fact(
@@ -398,7 +471,7 @@ async def _save_fact(
 	typer.echo(f'saved {result.slug} ({result.token_count} tokens)')
 
 
-async def _search(query: str, budget: int, scope: list[str] | None) -> None:
+async def _search(query: str, budget: int, scope: list[str] | None, format: str = 'text') -> None:
 	project = load_project()
 	db = await _open_project_db(project)
 	store = SQLiteStore(db, project.name)
@@ -408,7 +481,27 @@ async def _search(query: str, budget: int, scope: list[str] | None) -> None:
 		scope=scope,
 	)
 	await db.close()
-	typer.echo(pack.render_markdown())
+
+	if format == 'json':
+		import json
+		data = {
+			'query': pack.query,
+			'budget_tokens': pack.budget_tokens,
+			'evidence': [
+				{
+					'slug': c.slug,
+					'section': c.section,
+					'content': c.content[:200],
+					'score': c.score,
+					'token_count': c.token_count,
+				}
+				for c in pack.evidence
+			],
+			'warnings': pack.warnings,
+		}
+		typer.echo(json.dumps(data, indent=2))
+	else:
+		typer.echo(pack.render_markdown())
 
 
 async def _session_start() -> None:
@@ -1054,6 +1147,39 @@ async def _wiki_restore(slug: str) -> None:
 		await db.close()
 
 
+async def _wiki_archive(slug: str, reason: str) -> None:
+	"""Archive a wiki section."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT id FROM wiki_sections WHERE kb_name=? AND slug=? AND archived=FALSE',
+			(project.name, slug),
+		)
+		if not rows:
+			typer.echo(f'Section not found or already archived: {slug}')
+			raise typer.Exit(code=1)
+
+		await db.execute(
+			'UPDATE wiki_sections SET archived=TRUE, archived_at=datetime("now"), archive_reason=? '
+			'WHERE kb_name=? AND slug=?',
+			(reason, project.name, slug),
+		)
+		await db.commit()
+		typer.echo(f'Archived: {slug}')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('archive')
+def wiki_archive(
+	slug: Annotated[str, typer.Argument(help='Section slug to archive')],
+	reason: Annotated[str, typer.Option('--reason', help='Archive reason')] = '',
+) -> None:
+	"""Archive a wiki section."""
+	asyncio.run(_wiki_archive(slug, reason))
+
+
 @wiki_app.command('purge')
 def wiki_purge(
 	older_than_days: Annotated[
@@ -1160,6 +1286,7 @@ def flush_standalone(
 	decision: Annotated[list[str] | None, typer.Option('--decision')] = None,
 	next_step: Annotated[list[str] | None, typer.Option('--next-step')] = None,
 	session_id: Annotated[str | None, typer.Option('--session-id')] = None,
+	ci: Annotated[bool, typer.Option('--ci', help='CI mode: exit 10 if queued')] = False,
 ) -> None:
 	"""CI-mode flush: write summary to KB without daemon."""
 	asyncio.run(
@@ -1168,12 +1295,13 @@ def flush_standalone(
 			decisions=decision or [],
 			next_steps=next_step or [],
 			session_id=session_id,
+			ci=ci,
 		)
 	)
 
 
 async def _flush_ci(
-	summary: str, decisions: list[str], next_steps: list[str], session_id: str | None
+	summary: str, decisions: list[str], next_steps: list[str], session_id: str | None, ci: bool = False
 ) -> None:
 	import uuid
 
@@ -1196,6 +1324,8 @@ async def _flush_ci(
 			content=content, section='context', tags=['ci-flush'], session_id=sid
 		)
 		typer.echo(f'CI flush saved ({token_count} tokens, session {sid})')
+		if ci:
+			raise typer.Exit(code=0)
 	finally:
 		await db.close()
 
