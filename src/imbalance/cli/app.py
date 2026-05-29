@@ -2041,5 +2041,24 @@ def debug_sessions_list(
 	asyncio.run(_debug_sessions_list(status))
 
 
+@app.command('completion')
+def completion(
+	shell: Annotated[str, typer.Argument(help='Shell type: bash, zsh, fish')],
+) -> None:
+	"""Generate shell completion script."""
+	if shell == 'bash':
+		typer.echo('# Add to ~/.bashrc:')
+		typer.echo('eval "$(_IMBALANCE_COMPLETE=bash_source imbalance)"')
+	elif shell == 'zsh':
+		typer.echo('# Add to ~/.zshrc:')
+		typer.echo('eval "$(_IMBALANCE_COMPLETE=zsh_source imbalance)"')
+	elif shell == 'fish':
+		typer.echo('# Add to ~/.config/fish/completions/imbalance.fish:')
+		typer.echo('_IMBALANCE_COMPLETE=fish_source imbalance | source')
+	else:
+		typer.echo(f'Unknown shell: {shell}. Use: bash, zsh, fish')
+		raise typer.Exit(code=1)
+
+
 if __name__ == '__main__':
 	app()
