@@ -25,6 +25,30 @@ class NotificationConfig:
 
 
 @dataclass(frozen=True)
+class SecurityConfig:
+	"""Security configuration for redaction and logging."""
+	redact_secrets: bool = True
+	redact_pii: bool = False
+	log_prompt_bodies: bool = False
+
+
+@dataclass(frozen=True)
+class CostConfig:
+	"""Cost control configuration."""
+	mode: str = 'warn'
+	daily_token_cap: int = 100_000
+	flush_min_interval_sec: int = 60
+	prefer_free_models: bool = True
+	queue_on_cap_reached: bool = True
+
+
+@dataclass(frozen=True)
+class MemoryConfig:
+	"""Memory mode configuration."""
+	mode: str = 'read_write'
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
 	name: str
 	version: str
@@ -39,6 +63,9 @@ class ProjectConfig:
 	conflict_mode: str = 'warn'
 	inherit: InheritConfig | None = None
 	notifications: NotificationConfig = NotificationConfig()
+	security: SecurityConfig = SecurityConfig()
+	cost: CostConfig = CostConfig()
+	memory: MemoryConfig = MemoryConfig()
 
 
 @dataclass(frozen=True)
@@ -72,6 +99,9 @@ class Project:
 		quality = retrieval.get('quality', {})
 		kb_inherit = kb.get('inherit', {})
 		notifications = raw.get('notifications', {})
+		security = raw.get('security', {})
+		cost = raw.get('cost', {})
+		memory = raw.get('memory', {})
 
 		name = project.get('name')
 		if not name:
@@ -91,6 +121,21 @@ class Project:
 			kb_stale_days=int(notifications.get('kb_stale_days', 14)),
 			circuit_breaker_open=bool(notifications.get('circuit_breaker_open', True)),
 		)
+		sec = SecurityConfig(
+			redact_secrets=bool(security.get('redact_secrets', True)),
+			redact_pii=bool(security.get('redact_pii', False)),
+			log_prompt_bodies=bool(security.get('log_prompt_bodies', False)),
+		)
+		cost_cfg = CostConfig(
+			mode=str(cost.get('mode', 'warn')),
+			daily_token_cap=int(cost.get('daily_token_cap', 100_000)),
+			flush_min_interval_sec=int(cost.get('flush_min_interval_sec', 60)),
+			prefer_free_models=bool(cost.get('prefer_free_models', True)),
+			queue_on_cap_reached=bool(cost.get('queue_on_cap_reached', True)),
+		)
+		mem_cfg = MemoryConfig(
+			mode=str(memory.get('mode', 'read_write')),
+		)
 		config = ProjectConfig(
 			name=name,
 			version=str(project.get('version', '1')),
@@ -105,6 +150,9 @@ class Project:
 			conflict_mode=str(quality.get('conflict_mode', 'warn')),
 			inherit=inherit,
 			notifications=notif,
+			security=sec,
+			cost=cost_cfg,
+			memory=mem_cfg,
 		)
 		return cls(
 			root=path.parent,

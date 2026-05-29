@@ -177,6 +177,24 @@ def queue_retry(
 	asyncio.run(_queue_retry(session_id))
 
 
+async def _queue_clear() -> None:
+	"""Clear all entries from the flush queue."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		await db.execute('DELETE FROM flush_queue')
+		await db.commit()
+		typer.echo('Flush queue cleared')
+	finally:
+		await db.close()
+
+
+@queue_app.command('clear')
+def queue_clear() -> None:
+	"""Clear all entries from the flush queue."""
+	asyncio.run(_queue_clear())
+
+
 @daemon_app.command('start')
 def daemon_start(
 	port: Annotated[int, typer.Option('--port')] = 4731,
@@ -214,6 +232,41 @@ def daemon_stop() -> None:
 	except PermissionError:
 		typer.echo(f'Permission denied to kill process {pid}')
 		raise typer.Exit(code=1) from None
+
+
+async def _daemon_status() -> None:
+	"""Check daemon status."""
+	try:
+		from imbalance.server import PID_FILE
+	except ImportError:
+		typer.echo('Daemon PID file path unavailable')
+		return
+
+	if not PID_FILE.exists():
+		typer.echo('Daemon is not running (no PID file)')
+		return
+
+	try:
+		pid = int(PID_FILE.read_text().strip())
+	except (ValueError, OSError):
+		typer.echo('Invalid PID file')
+		return
+
+	import os
+
+	try:
+		os.kill(pid, 0)
+		typer.echo(f'Daemon is running (PID {pid})')
+	except ProcessLookupError:
+		typer.echo(f'Daemon process {pid} not found (stale PID file)')
+	except PermissionError:
+		typer.echo(f'Daemon appears to be running (PID {pid})')
+
+
+@daemon_app.command('status')
+def daemon_status() -> None:
+	"""Check daemon status."""
+	asyncio.run(_daemon_status())
 
 
 @daemon_app.command('install')
@@ -731,6 +784,24 @@ def _mcp_config(cwd: Path) -> None:
 	vsc_settings.write_text(json.dumps(vsc_existing, indent=2) + '\n')
 	typer.echo('Updated .vscode/settings.json')
 
+	# Codex: ~/.codex/config.toml
+	codex_config = Path.home() / '.codex' / 'config.toml'
+	if codex_config.parent.exists():
+		codex_content = codex_config.read_text(encoding='utf-8') if codex_config.exists() else ''
+		if 'imbalance' not in codex_content:
+			codex_entry = '\n[[mcp_servers]]\nname = "imbalance"\nurl = "http://localhost:4731/mcp/sse"\n'
+			codex_config.write_text(codex_content + codex_entry, encoding='utf-8')
+			typer.echo('Updated ~/.codex/config.toml')
+
+	# Gemini: ~/.gemini/settings.json
+	gemini_config = Path.home() / '.gemini' / 'settings.json'
+	if gemini_config.parent.exists():
+		gemini_existing = json.loads(gemini_config.read_text()) if gemini_config.exists() else {}
+		gemini_servers = gemini_existing.setdefault('mcpServers', {})
+		gemini_servers['imbalance'] = {'httpUrl': 'http://localhost:4731/mcp/sse'}
+		gemini_config.write_text(json.dumps(gemini_existing, indent=2) + '\n')
+		typer.echo('Updated ~/.gemini/settings.json')
+
 
 def _is_managed_file(path: Path) -> bool:
 	try:
@@ -918,6 +989,49 @@ async def _wiki_show(slug: str, include_archived: bool) -> None:
 		await db.close()
 
 
+async def _wiki_edit(slug: str, content: str) -> None:
+	"""Edit a wiki section."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		rows = await db.execute_fetchall(
+			'SELECT section FROM wiki_sections WHERE kb_name=? AND slug=?',
+			(project.name, slug),
+		)
+		if not rows:
+			typer.echo(f'Section not found: {slug}')
+			raise typer.Exit(code=1)
+
+		from imbalance.core.tokens import estimate_tokens
+		token_count = estimate_tokens(content)
+
+		await db.execute(
+			'UPDATE wiki_sections SET content=?, token_count=?, updated_at=datetime("now") '
+			'WHERE kb_name=? AND slug=?',
+			(content, token_count, project.name, slug),
+		)
+		await db.commit()
+		typer.echo(f'Updated: {slug} ({token_count} tokens)')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('edit')
+def wiki_edit(
+	slug: Annotated[str, typer.Argument(help='Section slug')],
+	content: Annotated[str, typer.Option('--content', '-c', help='New content')] = '',
+	file: Annotated[str | None, typer.Option('--file', '-f', help='Read content from file')] = None,
+) -> None:
+	"""Edit a wiki section."""
+	if file:
+		from pathlib import Path
+		content = Path(file).read_text(encoding='utf-8')
+	if not content:
+		typer.echo('No content provided. Use --content or --file')
+		raise typer.Exit(code=1)
+	asyncio.run(_wiki_edit(slug, content))
+
+
 @wiki_app.command('restore')
 def wiki_restore(
 	slug: Annotated[str, typer.Argument(help='Section slug to restore from archive')],
@@ -974,6 +1088,27 @@ async def _wiki_purge(older_than_days: int) -> None:
 		typer.echo(f'Purged {len(rows)} archived sections')
 	finally:
 		await db.close()
+
+
+async def _config_show() -> None:
+	"""Show current project configuration."""
+	project = load_project()
+	typer.echo(f'Config: {project.config_path}')
+	typer.echo(f'Name: {project.name}')
+	typer.echo(f'DB: {project.db_path}')
+	typer.echo(f'KB dir: {project.kb_dir}')
+	typer.echo()
+	typer.echo('Full config:')
+	if project.config_path.exists():
+		typer.echo(project.config_path.read_text(encoding='utf-8'))
+	else:
+		typer.echo('(no config file found)')
+
+
+@app.command('config-show')
+def config_show() -> None:
+	"""Show current project configuration."""
+	asyncio.run(_config_show())
 
 
 @app.command('backup')
