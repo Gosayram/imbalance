@@ -139,4 +139,14 @@ def create_app() -> FastAPI:
 		finally:
 			await db.close()
 
+	@app.get('/metrics')
+	async def metrics():
+		from fastapi.responses import PlainTextResponse
+
+		from imbalance.core.metrics import get_metrics
+		return PlainTextResponse(
+			get_metrics().render_prometheus(),
+			media_type='text/plain; version=0.0.4; charset=utf-8',
+		)
+
 	return app
