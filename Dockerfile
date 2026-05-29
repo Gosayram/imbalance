@@ -1,35 +1,38 @@
-FROM python:3.14-slim AS builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git curl && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-
-COPY pyproject.toml uv.lock ./
-RUN pip install uv==0.11.* && uv sync --frozen --no-dev --compile-bytecode \
-    --extra ui --extra ollama
-
-COPY src/ ./src/
-
-FROM python:3.14-slim AS runtime
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tini curl && rm -rf /var/lib/apt/lists/*
+FROM python:3.14-slim
 
 WORKDIR /app
 
-COPY --from=builder /build/.venv /app/.venv
-COPY --from=builder /build/src   /app/src
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    IMBALANCE_DATA_DIR=/data
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-VOLUME ["/data"]
+# Copy project files
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
+
+# Install dependencies
+RUN uv sync --no-dev --no-install-project
+
+# Install the project
+RUN uv sync --no-dev
+
+# Create data directory
+RUN mkdir -p /data
+
+# Set environment variables
+ENV IMBALANCE_DATA_DIR=/data
+ENV PYTHONUNBUFFERED=1
+
+# Expose port for daemon
 EXPOSE 4731
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:4731/health || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:4731/health')" || exit 1
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["python", "-m", "imbalance.server"]
+# Run daemon
+CMD ["uv", "run", "imbalance", "daemon", "start", "--port", "4731"]

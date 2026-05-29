@@ -42,7 +42,7 @@ async def dedup_check(
 		return DedupResult(is_duplicate=False)
 
 	try:
-		embedder = _get_embedder()
+		embedder = await _get_embedder()
 		if embedder is not None:
 			new_emb = (await embedder.embed([new_content]))[0]
 			for r in rows:
@@ -73,19 +73,19 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 _embedder = None
+_embedder_loaded = False
 
 
-def _get_embedder():
-	global _embedder
-	if _embedder is not None:
+async def _get_embedder():
+	global _embedder, _embedder_loaded
+	if _embedder_loaded:
 		return _embedder
+	_embedder_loaded = True
 	try:
-		import asyncio
-
 		from imbalance.core.embeddings import EmbeddingConfig, build_provider
 
 		config = EmbeddingConfig(provider='ollama', model='nomic-embed-text:v1.5')
-		embedder = asyncio.get_event_loop().run_until_complete(build_provider(config))
+		embedder = await build_provider(config)
 		if embedder is not None:
 			_embedder = embedder
 		return embedder
