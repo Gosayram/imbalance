@@ -76,6 +76,26 @@ def rrf_merge(
 	return [chunks[slug] for slug, _ in ranked]
 
 
+def score_chunks(
+	chunks: list[ContextChunk],
+	query: str,
+	scope_weights: dict[str, float] | None = None,
+	confidence_weight: float = 0.05,
+) -> list[ContextChunk]:
+	"""Score and rank chunks based on scope weights and confidence."""
+	weights = scope_weights or DEFAULT_SCOPE_WEIGHTS
+	scored: list[tuple[ContextChunk, float]] = []
+
+	for chunk in chunks:
+		section_weight = weights.get(chunk.section, 1.0)
+		confidence_boost = confidence_weight * chunk.confidence
+		final_score = chunk.score * section_weight + confidence_boost
+		scored.append((chunk, final_score))
+
+	scored.sort(key=lambda x: x[1], reverse=True)
+	return [chunk for chunk, _ in scored]
+
+
 class QueryEngine:
 	def __init__(
 		self,

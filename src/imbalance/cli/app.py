@@ -858,10 +858,18 @@ async def _setup_all_agents(
 def _mcp_config(cwd: Path) -> None:
 	"""Generate MCP config files for all detected agents."""
 	import json
+	import shutil
+
+	def _backup_if_exists(path: Path) -> None:
+		"""Create .bak backup before overwriting."""
+		if path.exists():
+			backup = path.with_suffix(path.suffix + '.bak')
+			shutil.copy2(path, backup)
 
 	# Cursor: .cursor/mcp.json
 	cursor_mcp = cwd / '.cursor' / 'mcp.json'
 	cursor_mcp.parent.mkdir(parents=True, exist_ok=True)
+	_backup_if_exists(cursor_mcp)
 	existing = json.loads(cursor_mcp.read_text()) if cursor_mcp.exists() else {}
 	servers = existing.setdefault('mcpServers', {})
 	servers['imbalance'] = {'url': 'http://localhost:4731/mcp/sse'}
@@ -871,6 +879,7 @@ def _mcp_config(cwd: Path) -> None:
 	# VSCode/Cline: .vscode/settings.json
 	vsc_settings = cwd / '.vscode' / 'settings.json'
 	vsc_settings.parent.mkdir(parents=True, exist_ok=True)
+	_backup_if_exists(vsc_settings)
 	vsc_existing = json.loads(vsc_settings.read_text()) if vsc_settings.exists() else {}
 	cline_servers = vsc_existing.setdefault('cline.mcpServers', {})
 	cline_servers['imbalance'] = {'url': 'http://localhost:4731/mcp/sse'}
@@ -882,6 +891,7 @@ def _mcp_config(cwd: Path) -> None:
 	if codex_config.parent.exists():
 		codex_content = codex_config.read_text(encoding='utf-8') if codex_config.exists() else ''
 		if 'imbalance' not in codex_content:
+			_backup_if_exists(codex_config)
 			codex_entry = '\n[[mcp_servers]]\nname = "imbalance"\nurl = "http://localhost:4731/mcp/sse"\n'
 			codex_config.write_text(codex_content + codex_entry, encoding='utf-8')
 			typer.echo('Updated ~/.codex/config.toml')
@@ -1393,6 +1403,38 @@ async def _wiki_conflicts() -> None:
 			typer.echo(f'{c["source_slug"]} ↔ {c["target_slug"]} ({c["created_at"]})')
 	finally:
 		await db.close()
+
+
+async def _wiki_resolve_conflict(source: str, target: str, resolution: str) -> None:
+	"""Resolve a conflict between two wiki sections."""
+	project = load_project()
+	db = await _open_project_db(project)
+	try:
+		# Remove the conflict link
+		await db.execute(
+			"DELETE FROM kb_links WHERE kb_name=? AND source_slug=? AND target_slug=? AND link_type='conflicts'",
+			(project.name, source, target),
+		)
+		# Add resolution note
+		if resolution:
+			await db.execute(
+				"INSERT INTO kb_links(kb_name, source_slug, target_slug, link_type) VALUES (?, ?, ?, 'resolved')",
+				(project.name, source, target),
+			)
+		await db.commit()
+		typer.echo(f'Resolved conflict: {source} ↔ {target}')
+	finally:
+		await db.close()
+
+
+@wiki_app.command('resolve-conflict')
+def wiki_resolve_conflict(
+	source: Annotated[str, typer.Argument(help='Source slug')],
+	target: Annotated[str, typer.Argument(help='Target slug')],
+	resolution: Annotated[str, typer.Option('--resolution', help='Resolution note')] = '',
+) -> None:
+	"""Resolve a conflict between two wiki sections."""
+	asyncio.run(_wiki_resolve_conflict(source, target, resolution))
 
 
 @app.command('stats')
