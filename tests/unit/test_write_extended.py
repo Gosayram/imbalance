@@ -54,7 +54,7 @@ async def test_write_engine_save_fact_with_secret():
 
 	engine = WriteEngine(store, redact_secrets=True)
 	result = await engine.save_fact(
-		content='api_key = "sk-abc123def456ghi789jkl012mno345pqr678stu901vwx234"',
+		content='api_key = "sk-fake-api-key-for-testing-only-not-real-1234567890"',
 		section='context',
 	)
 
@@ -85,7 +85,7 @@ async def test_write_engine_save_fact_redact_disabled():
 
 	engine = WriteEngine(store, redact_secrets=False)
 	result = await engine.save_fact(
-		content='api_key = "sk-abc123def456ghi789jkl012mno345pqr678stu901vwx234"',
+		content='api_key = "sk-fake-api-key-for-testing-only-not-real-1234567890"',
 		section='context',
 	)
 
