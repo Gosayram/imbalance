@@ -1,0 +1,12 @@
+{% for section in sections %}
+<tr>
+    <td><span class="badge badge-success">{{ section.section }}</span></td>
+    <td><a href="/ui/wiki/{{ section.slug }}">{{ section.slug }}</a></td>
+    <td>{{ section.token_count }}</td>
+</tr>
+{% endfor %}
+{% if not sections %}
+<tr>
+    <td colspan="3" style="color: var(--text-secondary); text-align: center;">No sections yet</td>
+</tr>
+{% endif %}

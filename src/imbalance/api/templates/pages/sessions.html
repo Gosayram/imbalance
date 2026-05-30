@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set active = 'sessions' %}
+
+{% block title %}Sessions - imbalance{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1 style="font-size: 1.5rem;">Sessions</h1>
+    <div style="display: flex; gap: 1rem;">
+        <select name="status" hx-get="/ui/api/sessions/filter" hx-target="#sessions-table" hx-trigger="change">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="pending_flush">Pending Flush</option>
+            <option value="flushed">Flushed</option>
+            <option value="failed">Failed</option>
+        </select>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Machine</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Flushed</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="sessions-table" hx-get="/ui/api/sessions" hx-trigger="load" hx-target="this">
+            <tr>
+                <td colspan="6" style="color: var(--text-secondary)">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

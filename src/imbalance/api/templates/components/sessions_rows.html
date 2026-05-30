@@ -1,0 +1,28 @@
+{% for session in sessions %}
+<tr>
+    <td style="font-family: monospace; font-size: 0.75rem;">{{ session.id[:8] }}...</td>
+    <td style="font-size: 0.75rem;">{{ session.machine_id or '' }}</td>
+    <td>
+        {% if session.status == 'active' %}
+            <span class="badge badge-success">{{ session.status }}</span>
+        {% elif session.status == 'pending_flush' %}
+            <span class="badge badge-warning">{{ session.status }}</span>
+        {% elif session.status == 'failed' %}
+            <span class="badge badge-danger">{{ session.status }}</span>
+        {% else %}
+            <span class="badge">{{ session.status }}</span>
+        {% endif %}
+    </td>
+    <td style="font-size: 0.75rem; color: var(--text-secondary);">{{ session.started_at or '' }}</td>
+    <td style="font-size: 0.75rem; color: var(--text-secondary);">{{ session.flushed_at or '' }}</td>
+    <td>
+        <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;"
+                hx-get="/ui/api/sessions/{{ session.id }}/details" hx-target="#session-details">Details</button>
+    </td>
+</tr>
+{% endfor %}
+{% if not sessions %}
+<tr>
+    <td colspan="6" style="color: var(--text-secondary); text-align: center;">No sessions found</td>
+</tr>
+{% endif %}

@@ -38,6 +38,7 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+test_results/
 .tox/
 .nox/
 .coverage
@@ -205,6 +206,9 @@ tempCodeRunnerFile.py
 
 # Ruff stuff:
 .ruff_cache/
+.uv-cache/
+.uv-python/
+.data/
 
 # PyPI configuration file
 .pypirc

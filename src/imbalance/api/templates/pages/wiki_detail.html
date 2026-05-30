@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% set active = 'wiki' %}
+
+{% block title %}{{ section.slug }} - imbalance{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+    <a href="/ui/wiki" style="font-size: 0.875rem; color: var(--text-secondary);">← Back to Wiki</a>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 300px; gap: 1.5rem;">
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">{{ section.slug }}</h2>
+                <div style="display: flex; gap: 0.5rem;">
+                    <span class="badge badge-success">{{ section.section }}</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ section.token_count }} tokens</span>
+                </div>
+            </div>
+            <div style="white-space: pre-wrap; font-family: monospace; font-size: 0.875rem; line-height: 1.6;">{{ section.content }}</div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Edit Content</h2>
+            </div>
+            <form hx-put="/ui/api/sections/{{ section.slug }}" hx-target="#edit-status">
+                <textarea name="content" rows="15" style="font-family: monospace;">{{ section.content }}</textarea>
+                <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span id="edit-status"></span>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Metadata</h2>
+            </div>
+            <div style="font-size: 0.875rem;">
+                <div style="margin-bottom: 0.75rem;">
+                    <div style="color: var(--text-secondary); font-size: 0.75rem;">Section</div>
+                    <div>{{ section.section }}</div>
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    <div style="color: var(--text-secondary); font-size: 0.75rem;">Slug</div>
+                    <div>{{ section.slug }}</div>
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    <div style="color: var(--text-secondary); font-size: 0.75rem;">Tokens</div>
+                    <div>{{ section.token_count }}</div>
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    <div style="color: var(--text-secondary); font-size: 0.75rem;">Last Updated</div>
+                    <div>{{ section.updated_at or 'Unknown' }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Actions</h2>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <button class="btn" hx-get="/ui/api/sections/{{ section.slug }}/history" hx-target="#history-content">View History</button>
+                <button class="btn btn-danger" hx-delete="/ui/api/sections/{{ section.slug }}" hx-confirm="Archive this section?">Archive</button>
+            </div>
+        </div>
+
+        <div class="card" id="history-content" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">History</h2>
+            </div>
+            <div style="font-size: 0.875rem; max-height: 300px; overflow-y: auto;">
+                Loading history...
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

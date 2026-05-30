@@ -1,0 +1,37 @@
+{
+  "name": "imbalance",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/imbalance",
+  "postCreateCommand": "UV_CACHE_DIR=.uv-cache uv sync --extra dev",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/imbalance/.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "ruff.enable": true,
+        "ruff.configuration": "pyproject.toml",
+        "[markdown]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        },
+        "[json][jsonc][yaml]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        }
+      },
+      "extensions": [
+        "charliermarsh.ruff",
+        "esbenp.prettier-vscode",
+        "ms-python.python",
+        "ms-python.mypy-type-checker"
+      ]
+    }
+  },
+  "remoteEnv": {
+    "IMBALANCE_DATA_DIR": "/workspaces/imbalance/.data/imbalance",
+    "UV_CACHE_DIR": "/workspaces/imbalance/.uv-cache"
+  }
+}

@@ -1,0 +1,22 @@
+services:
+  daemon:
+    build: .
+    ports:
+      - "4731:4731"
+    volumes:
+      - imbalance-data:/data
+    environment:
+      - IMBALANCE_DATA_DIR=/data
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4731/health')"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  imbalance-data:
+    driver: local

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set active = 'wiki' %}
+
+{% block title %}Wiki - imbalance{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1 style="font-size: 1.5rem;">Wiki Sections</h1>
+    <div style="display: flex; gap: 1rem;">
+        <input type="text" placeholder="Filter sections..." 
+               hx-get="/ui/api/sections/filter" 
+               hx-trigger="keyup changed delay:300ms" 
+               hx-target="#sections-table"
+               name="q"
+               style="width: 250px;">
+        <a href="/ui/wiki/new" class="btn btn-primary">New Section</a>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Section</th>
+                <th>Slug</th>
+                <th>Tokens</th>
+                <th>Updated</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="sections-table" hx-get="/ui/api/sections" hx-trigger="load" hx-target="this">
+            <tr>
+                <td colspan="5" style="color: var(--text-secondary)">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

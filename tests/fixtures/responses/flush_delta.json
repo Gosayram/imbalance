@@ -1,0 +1,36 @@
+{
+    "decisions": [
+        {
+            "title": "Use PostgreSQL for primary database",
+            "rationale": "JSONB support, FTS5 equivalent, team familiarity",
+            "category": "database"
+        },
+        {
+            "title": "Implement JWT with refresh token rotation",
+            "rationale": "Stateless auth, works across services, industry standard",
+            "category": "auth"
+        }
+    ],
+    "facts": [
+        {
+            "content": "FastAPI 0.136 with Pydantic v2 validation",
+            "tags": ["stack", "framework"]
+        },
+        {
+            "content": "Rate limiter uses sliding window algorithm",
+            "tags": ["infra", "security"]
+        }
+    ],
+    "issues": [
+        {
+            "content": "Migration 0014 fails on empty database",
+            "workaround": "Run seed script before migration"
+        }
+    ],
+    "next_steps": [
+        "Write integration tests for auth flow",
+        "Set up CI pipeline with security scanning",
+        "Document API endpoints in OpenAPI spec"
+    ],
+    "current_focus": "Auth middleware refactoring and testing"
+}

@@ -1,0 +1,44 @@
+[summary]
+value = "Major refactoring of auth middleware. Moved from global state to dependency injection. Updated all endpoints to use the new auth flow. Fixed race condition in concurrent token refresh. Added comprehensive error handling for expired tokens, invalid signatures, and missing claims. Integrated with the new rate limiter. Updated documentation and added inline comments explaining the security model."
+
+[decisions]
+value = [
+    "Use FastAPI Depends for auth injection instead of global middleware",
+    "Implement pessimistic locking on refresh_tokens to prevent race conditions",
+    "Add token version field to support forced invalidation",
+    "Use bcrypt for password hashing with cost factor 12",
+    "Store session metadata in Redis for fast lookup",
+    "Implement sliding window rate limiter per user",
+    "Add request ID tracing for all auth operations",
+    "Use async context managers for database connections",
+    "Implement circuit breaker for external auth providers",
+    "Add structured logging with correlation IDs",
+    "Use pydantic v2 for all request/response validation",
+    "Implement graceful degradation when Redis is unavailable",
+    "Add health check endpoint for auth service",
+    "Use connection pooling for database access",
+    "Implement retry with exponential backoff for transient failures",
+]
+
+[findings]
+value = [
+    "Race condition in refresh token rotation was caused by missing database lock",
+    "Token expiry was not validated on the server side, only client side",
+    "Rate limiter was using in-memory state which doesn't work across workers",
+    "Error responses leaked internal implementation details",
+    "Database connections were not properly closed on error paths",
+    "Logging was inconsistent across auth endpoints",
+]
+
+[next_steps]
+value = [
+    "Run load tests with 1000 concurrent users",
+    "Set up monitoring dashboards for auth metrics",
+    "Document the new auth flow in architecture docs",
+    "Create runbook for common auth issues",
+    "Schedule security review with the team",
+]
+
+[session]
+id = "s-long-001"
+started_at = "2026-05-27T08:00:00Z"

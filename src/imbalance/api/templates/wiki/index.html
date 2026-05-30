@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Wiki — imbalance{% endblock %}
+{% block content %}
+<hgroup>
+    <h2>Wiki</h2>
+    {% if include_archived %}
+    <p><a href="/wiki?include_archived=false">Hide archived</a></p>
+    {% else %}
+    <p><a href="/wiki?include_archived=true">Show archived</a></p>
+    {% endif %}
+</hgroup>
+{% for section_name, entries in sections.items() %}
+<article>
+    <header><h3>{{ section_name }}</h3></header>
+    <ul>
+        {% for e in entries %}
+        <li>
+            <a href="/wiki/{{ e.slug }}">{{ e.slug }}</a>
+            <span class="muted">({{ e.token_count }} tokens, {{ e.updated_at }})</span>
+            {% if e.archived %}<span class="tag">archived</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</article>
+{% endfor %}
+{% endblock %}

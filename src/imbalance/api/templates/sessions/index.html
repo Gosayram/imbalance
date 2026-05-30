@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Sessions — imbalance{% endblock %}
+{% block content %}
+<h2>Sessions</h2>
+<table>
+    <thead>
+        <tr><th>ID</th><th>Status</th><th>Started</th><th>Flushed</th><th>Compacted</th></tr>
+    </thead>
+    <tbody>
+        {% for s in sessions %}
+        <tr>
+            <td><code>{{ s.id[:8] }}…</code></td>
+            <td><span class="tag">{{ s.status }}</span></td>
+            <td>{{ s.started_at }}</td>
+            <td>{{ s.flushed_at or '—' }}</td>
+            <td>{{ s.compacted_at or '—' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

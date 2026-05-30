@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ section.slug }} — imbalance{% endblock %}
+{% block content %}
+<article>
+    <header>
+        <hgroup>
+            <h2>{{ section.slug }}</h2>
+            <p>{{ section.section }} · {{ section.token_count }} tokens · {{ section.updated_at }}
+            {% if section.archived %}<span class="tag">archived</span>{% endif %}
+            </p>
+        </hgroup>
+    </header>
+    <div>
+        <a href="/wiki/{{ section.slug }}/edit" role="button" class="secondary">Edit</a>
+    </div>
+    {{ section.html_content | safe }}
+</article>
+{% endblock %}

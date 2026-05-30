@@ -1,0 +1,14 @@
+[project]
+name = "test-kb"
+version = "1"
+
+[kb]
+store = "test-kb"
+
+[retrieval]
+budget_tokens = 2000
+
+[flush]
+auto = false
+provider = "openrouter"
+max_tokens = 600

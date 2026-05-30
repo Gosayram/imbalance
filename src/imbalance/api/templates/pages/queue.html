@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set active = 'queue' %}
+
+{% block title %}Queue - imbalance{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1 style="font-size: 1.5rem;">Flush Queue</h1>
+    <div style="display: flex; gap: 1rem;">
+        <button class="btn" hx-post="/ui/api/queue/retry" hx-confirm="Retry all failed items?">Retry All</button>
+        <button class="btn btn-danger" hx-delete="/ui/api/queue" hx-confirm="Clear entire queue?">Clear Queue</button>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Session</th>
+                <th>Attempts</th>
+                <th>Next Retry</th>
+                <th>Error</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody hx-get="/ui/api/queue" hx-trigger="load, every 10s" hx-target="this">
+            <tr>
+                <td colspan="6" style="color: var(--text-secondary)">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
