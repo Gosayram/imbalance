@@ -1568,12 +1568,24 @@ async def _wiki_diff(slug: str, v1: int, v2: int) -> None:
 		content_v2 = rows[1]['content'] if v1 < v2 else rows[0]['content']
 		lines1 = content_v1.splitlines()
 		lines2 = content_v2.splitlines()
+
+		# Use colors if terminal supports it
+		use_color = typer.colors.isatty() if hasattr(typer.colors, 'isatty') else False
+
 		for _i, (l1, l2) in enumerate(zip(lines1, lines2, strict=False), 1):
 			if l1 != l2:
-				typer.echo(f'-{l1}' if l1 else ' ')
-				typer.echo(f'+{l2}' if l2 else ' ')
+				if use_color:
+					typer.echo(typer.style(f'-{l1}', fg=typer.colors.RED) if l1 else ' ')
+					typer.echo(typer.style(f'+{l2}', fg=typer.colors.GREEN) if l2 else ' ')
+				else:
+					typer.echo(f'-{l1}' if l1 else ' ')
+					typer.echo(f'+{l2}' if l2 else ' ')
 		for i in range(len(lines2) - len(lines1)):
-			typer.echo(f'+{lines2[len(lines1) + i]}')
+			line = lines2[len(lines1) + i]
+			if use_color:
+				typer.echo(typer.style(f'+{line}', fg=typer.colors.GREEN))
+			else:
+				typer.echo(f'+{line}')
 	finally:
 		await db.close()
 
