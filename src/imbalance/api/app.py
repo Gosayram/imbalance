@@ -45,11 +45,15 @@ def create_app() -> FastAPI:
 
 	from imbalance.api.routes.queue_ui import router as queue_router
 	from imbalance.api.routes.sessions import router as sessions_router
+	from imbalance.api.routes.ui import router as ui_router
+	from imbalance.api.routes.ui_api import router as ui_api_router
 	from imbalance.api.routes.wiki import router as wiki_router
 
 	app.include_router(wiki_router)
 	app.include_router(sessions_router)
 	app.include_router(queue_router)
+	app.include_router(ui_router)
+	app.include_router(ui_api_router)
 
 	@app.get('/', response_class=HTMLResponse)
 	async def index():

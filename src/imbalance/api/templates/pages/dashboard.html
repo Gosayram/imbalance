@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% set active = 'dashboard' %}
+
+{% block title %}Dashboard - imbalance{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 1.5rem; margin-bottom: 1.5rem;">Dashboard</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Wiki Sections</div>
+        <div class="stat-value" hx-get="/ui/api/stats/wiki" hx-trigger="load, every 30s" hx-target="this">
+            {{ wiki_count or 0 }}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Active Sessions</div>
+        <div class="stat-value" hx-get="/ui/api/stats/sessions" hx-trigger="load, every 30s" hx-target="this">
+            {{ session_count or 0 }}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Pending Queue</div>
+        <div class="stat-value" hx-get="/ui/api/stats/queue" hx-trigger="load, every 30s" hx-target="this">
+            {{ queue_count or 0 }}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Token Count</div>
+        <div class="stat-value" hx-get="/ui/api/stats/tokens" hx-trigger="load, every 30s" hx-target="this">
+            {{ token_count or 0 }}
+        </div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Recent Sections</h2>
+            <a href="/ui/wiki" class="btn">View All</a>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Section</th>
+                    <th>Slug</th>
+                    <th>Tokens</th>
+                </tr>
+            </thead>
+            <tbody hx-get="/ui/api/sections/recent" hx-trigger="load" hx-target="this">
+                <tr>
+                    <td colspan="3" style="color: var(--text-secondary)">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Recent Sessions</h2>
+            <a href="/ui/sessions" class="btn">View All</a>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody hx-get="/ui/api/sessions/recent" hx-trigger="load" hx-target="this">
+                <tr>
+                    <td colspan="3" style="color: var(--text-secondary)">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 1rem;">
+    <div class="card-header">
+        <h2 class="card-title">Quick Actions</h2>
+    </div>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <a href="/ui/search" class="btn btn-primary">Search KB</a>
+        <a href="/ui/wiki/new" class="btn">New Section</a>
+        <button class="btn" hx-post="/ui/api/compact" hx-confirm="Run compaction?">Run Compaction</button>
+    </div>
+</div>
+{% endblock %}

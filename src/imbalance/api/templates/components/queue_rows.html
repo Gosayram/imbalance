@@ -1,0 +1,18 @@
+{% for item in items %}
+<tr>
+    <td>{{ item.id }}</td>
+    <td style="font-family: monospace; font-size: 0.75rem;">{{ item.session_id[:8] }}...</td>
+    <td>{{ item.attempts }}</td>
+    <td style="font-size: 0.75rem; color: var(--text-secondary);">{{ item.next_retry or '' }}</td>
+    <td style="font-size: 0.75rem; color: var(--danger); max-width: 300px; overflow: hidden; text-overflow: ellipsis;">{{ item.error or '' }}</td>
+    <td>
+        <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;"
+                hx-post="/ui/api/queue/{{ item.id }}/retry">Retry</button>
+    </td>
+</tr>
+{% endfor %}
+{% if not items %}
+<tr>
+    <td colspan="6" style="color: var(--text-secondary); text-align: center;">Queue is empty</td>
+</tr>
+{% endif %}

@@ -1,0 +1,42 @@
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Results for "{{ query }}"</h2>
+        <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ pack.evidence|length }} results</span>
+    </div>
+
+    {% if pack.summary %}
+    <div style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius);">
+        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Summary</div>
+        <div style="white-space: pre-wrap;">{{ pack.summary }}</div>
+    </div>
+    {% endif %}
+
+    {% for chunk in pack.evidence %}
+    <div style="border-bottom: 1px solid var(--border); padding: 1rem 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <a href="/ui/wiki/{{ chunk.slug }}" style="font-weight: 500;">{{ chunk.slug }}</a>
+            <div style="display: flex; gap: 0.5rem;">
+                <span class="badge badge-success">{{ chunk.section }}</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ chunk.token_count }} tokens</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">score: {{ "%.3f"|format(chunk.score) }}</span>
+            </div>
+        </div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary); white-space: pre-wrap; max-height: 200px; overflow: hidden;">{{ chunk.content[:500] }}{% if chunk.content|length > 500 %}...{% endif %}</div>
+    </div>
+    {% endfor %}
+
+    {% if not pack.evidence %}
+    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+        No results found
+    </div>
+    {% endif %}
+
+    {% if pack.warnings %}
+    <div style="margin-top: 1rem; padding: 1rem; background: rgba(210, 153, 34, 0.1); border-radius: var(--radius);">
+        <div style="font-size: 0.75rem; color: var(--warning); margin-bottom: 0.5rem;">Warnings</div>
+        {% for warning in pack.warnings %}
+        <div style="font-size: 0.875rem;">{{ warning }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
